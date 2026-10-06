@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>AAPHREML-IRERC | Research Protocol Management System</title>
+  
+  <!-- Modern Institutional Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+  
+  <?!= include('styles/styles') ?>
+</head>
+<body>
+
+  <!-- Full-screen Global Loading Indicator -->
+  <div id="global-loader" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(7,18,36,0.65); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); z-index:9999; align-items:center; justify-content:center; flex-direction:column; color:white;">
+    <div style="background:rgba(15,39,68,0.9); border:1px solid rgba(255,255,255,0.15); box-shadow:0 20px 40px rgba(0,0,0,0.4); border-radius:18px; padding:32px 42px; display:flex; flex-direction:column; align-items:center;">
+      <div style="width:48px; height:48px; border:4px solid rgba(245,158,11,0.2); border-top-color:#f59e0b; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:16px;"></div>
+      <span style="font-family:'Outfit',sans-serif; font-weight:700; font-size:15px; letter-spacing:0.5px; color:#ffffff;">AAPHREML-IRERC Processing...</span>
+      <span style="font-size:11px; color:#94a3b8; margin-top:4px;">Secure Institutional Ethics Service</span>
+    </div>
+  </div>
+  <style>
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes fadeInUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes float { 0%,100% { transform:translateY(0px); } 50% { transform:translateY(-10px); } }
+    @keyframes shimmer { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
+    @keyframes pulseGlow { 0%,100% { box-shadow:0 0 20px rgba(245,158,11,0.15); } 50% { box-shadow:0 0 40px rgba(245,158,11,0.35); } }
+
+    /* ===== AUTH SCREEN STYLES ===== */
+    #auth-screen { min-height:100vh; background:linear-gradient(160deg,#040d1a 0%,#071224 25%,#0f2744 50%,#153866 75%,#1a4580 100%); position:relative; overflow:hidden; }
+    #auth-screen::before { content:''; position:absolute; top:-50%; right:-30%; width:80vw; height:80vw; border-radius:50%; background:radial-gradient(circle,rgba(245,158,11,0.06) 0%,transparent 70%); pointer-events:none; }
+    #auth-screen::after { content:''; position:absolute; bottom:-40%; left:-20%; width:70vw; height:70vw; border-radius:50%; background:radial-gradient(circle,rgba(37,99,235,0.06) 0%,transparent 70%); pointer-events:none; }
+
+    .auth-container { display:flex; min-height:100vh; position:relative; z-index:2; }
+    .auth-left { flex:1.1; display:flex; flex-direction:column; justify-content:center; padding:60px 80px; animation:fadeInUp 0.8s ease-out; }
+    .auth-right { flex:0.9; display:flex; align-items:center; justify-content:center; padding:40px; animation:fadeInUp 0.8s ease-out 0.2s both; }
+
+    .auth-brand { display:flex; align-items:center; gap:16px; margin-bottom:40px; }
+    .auth-brand-shield { width:56px; height:56px; background:linear-gradient(135deg,#f59e0b,#d97706); border-radius:14px; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 24px rgba(245,158,11,0.3); animation:pulseGlow 3s ease-in-out infinite; }
+    .auth-brand-shield svg { width:32px; height:32px; }
+    .auth-brand-text h1 { font-family:'Outfit',sans-serif; font-size:22px; font-weight:800; color:#fff; letter-spacing:-0.5px; }
+    .auth-brand-text p { font-size:12px; color:#94a3b8; font-weight:500; margin-top:2px; }
+
+    .auth-hero-title { font-family:'Outfit',sans-serif; font-size:42px; font-weight:800; color:#fff; line-height:1.15; margin-bottom:20px; }
+    .auth-hero-title .gold { background:linear-gradient(135deg,#f59e0b,#fbbf24); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+    .auth-hero-desc { font-size:16px; color:#94a3b8; line-height:1.7; max-width:520px; margin-bottom:36px; }
+
+    .auth-features { display:flex; flex-direction:column; gap:16px; }
+    .auth-feature { display:flex; align-items:center; gap:14px; padding:14px 18px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; transition:all 0.3s ease; }
+    .auth-feature:hover { background:rgba(255,255,255,0.07); border-color:rgba(245,158,11,0.3); transform:translateX(6px); }
+    .auth-feature-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .auth-feature h4 { font-family:'Outfit',sans-serif; font-size:13.5px; font-weight:700; color:#e2e8f0; margin-bottom:2px; }
+    .auth-feature p { font-size:11.5px; color:#64748b; }
+
+    .auth-card { width:100%; max-width:440px; background:rgba(255,255,255,0.97); border-radius:20px; box-shadow:0 30px 80px rgba(0,0,0,0.35),0 0 0 1px rgba(255,255,255,0.1); padding:0; overflow:hidden; }
+    .auth-card-header { background:linear-gradient(135deg,#0f2744,#153866); padding:28px 32px 22px; text-align:center; }
+    .auth-card-header h2 { font-family:'Outfit',sans-serif; font-size:20px; font-weight:800; color:#fff; margin-bottom:6px; }
+    .auth-card-header p { font-size:12px; color:#94a3b8; }
+
+    .auth-tabs { display:flex; border-bottom:2px solid #e2e8f0; }
+    .auth-tab { flex:1; padding:14px; text-align:center; font-family:'Outfit',sans-serif; font-size:13px; font-weight:700; color:#64748b; cursor:pointer; border:none; background:none; transition:all 0.3s ease; position:relative; }
+    .auth-tab.active { color:#0f2744; }
+    .auth-tab.active::after { content:''; position:absolute; bottom:-2px; left:20%; right:20%; height:3px; background:linear-gradient(90deg,#f59e0b,#fbbf24); border-radius:3px; }
+    .auth-tab:hover:not(.active) { color:#0f2744; background:#f8fafc; }
+
+    .auth-tab-pane { display:none; padding:28px 32px 32px; }
+    .auth-tab-pane.active { display:block; animation:fadeInUp 0.35s ease-out; }
+
+    .auth-field { margin-bottom:18px; }
+    .auth-field label { display:block; font-family:'Outfit',sans-serif; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px; letter-spacing:0.3px; }
+    .auth-field input, .auth-field select { width:100%; padding:11px 14px; font-family:'Plus Jakarta Sans',sans-serif; font-size:13.5px; border:1.5px solid #e2e8f0; border-radius:10px; background:#f8fafc; color:#0f172a; transition:all 0.2s ease; box-sizing:border-box; }
+    .auth-field input:focus, .auth-field select:focus { outline:none; border-color:#2563eb; background:#fff; box-shadow:0 0 0 4px rgba(37,99,235,0.1); }
+    .auth-field input::placeholder { color:#94a3b8; }
+    .auth-field .field-hint { font-size:11px; color:#94a3b8; margin-top:4px; }
+
+    .auth-btn { width:100%; padding:13px; font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; border:none; border-radius:12px; cursor:pointer; transition:all 0.3s ease; display:flex; align-items:center; justify-content:center; gap:8px; }
+    .auth-btn-primary { background:linear-gradient(135deg,#0f2744,#2563eb); color:#fff; box-shadow:0 4px 16px rgba(37,99,235,0.3); }
+    .auth-btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(37,99,235,0.4); }
+    .auth-btn-gold { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 16px rgba(245,158,11,0.3); }
+    .auth-btn-gold:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(245,158,11,0.4); }
+
+    .auth-divider { display:flex; align-items:center; gap:12px; margin:20px 0; font-size:11px; color:#94a3b8; }
+    .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:#e2e8f0; }
+
+    .auth-info-box { background:rgba(37,99,235,0.06); border:1px solid rgba(37,99,235,0.15); border-radius:10px; padding:14px 16px; margin-bottom:18px; }
+    .auth-info-box i { color:#2563eb; margin-right:6px; }
+    .auth-info-box p { font-size:12px; color:#334155; line-height:1.6; }
+    .auth-info-box.gold { background:rgba(245,158,11,0.06); border-color:rgba(245,158,11,0.2); }
+    .auth-info-box.gold i { color:#d97706; }
+
+    .auth-error { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:10px 14px; font-size:12px; color:#b91c1c; margin-bottom:14px; display:none; }
+    .auth-success { background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:10px 14px; font-size:12px; color:#047857; margin-bottom:14px; display:none; }
+
+    .auth-footer { text-align:center; padding:16px 32px 24px; border-top:1px solid #f1f5f9; }
+    .auth-footer p { font-size:11px; color:#94a3b8; }
+    .auth-footer a { color:#2563eb; text-decoration:none; font-weight:600; }
+
+    @media (max-width:900px) {
+      .auth-container { flex-direction:column; }
+      .auth-left { padding:40px 24px 20px; text-align:center; align-items:center; }
+      .auth-hero-title { font-size:28px; }
+      .auth-features { display:none; }
+      .auth-right { padding:0 16px 40px; }
+      .auth-card { max-width:100%; }
+    }
+  </style>
+
+  <!-- ============================================================ -->
+  <!-- AUTH SCREEN: Login & Registration Landing Page -->
+  <!-- ============================================================ -->
+  <div id="auth-screen">
+    <div class="auth-container">
+      <!-- Left: Hero / Branding -->
+      <div class="auth-left">
+        <div class="auth-brand">
+          <div class="auth-brand-shield" style="background:transparent;box-shadow:none;display:flex;align-items:center;justify-content:center;">
+            <img src="Logo File.png" alt="Addis Ababa City Administration Health Bureau Logo" style="width:56px;height:56px;object-fit:cover;border-radius:50%;display:block;" onerror="this.style.display='none'">
+          </div>
+          <div class="auth-brand-text">
+            <h1>AAPHREML-IRERC</h1>
+            <p>Addis Ababa Health Bureau</p>
+          </div>
+        </div>
+
+        <h2 class="auth-hero-title">
+          Institutional <span class="gold">Research Ethics</span><br>Review Portal
+        </h2>
+        <p class="auth-hero-desc">
+          The official digital platform for the Addis Ababa City Administration Health Bureau
+          Institutional Research Ethics Review Committee. Submit, track, and manage research protocol ethical clearance.
+        </p>
+
+        <div class="auth-features">
+          <div class="auth-feature">
+            <div class="auth-feature-icon" style="background:rgba(245,158,11,0.15);color:#fbbf24;">
+              <i class="fas fa-file-medical"></i>
+            </div>
+            <div>
+              <h4>Investigators — Submit Protocols</h4>
+              <p>Register and submit research protocols for ethical review and clearance</p>
+            </div>
+          </div>
+          <div class="auth-feature">
+            <div class="auth-feature-icon" style="background:rgba(37,99,235,0.15);color:#60a5fa;">
+              <i class="fas fa-microscope"></i>
+            </div>
+            <div>
+              <h4>IRERC Members — Review &amp; Assess</h4>
+              <p>Committee members conduct independent ethical assessment of protocols</p>
+            </div>
+          </div>
+          <div class="auth-feature">
+            <div class="auth-feature-icon" style="background:rgba(16,185,129,0.15);color:#34d399;">
+              <i class="fas fa-shield-alt"></i>
+            </div>
+            <div>
+              <h4>Full Governance &amp; Compliance</h4>
+              <p>Audit trails, quorum verification, and Ethiopian regulatory compliance</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Auth Card -->
+      <div class="auth-right">
+        <div class="auth-card">
+          <div class="auth-card-header">
+            <h2><i class="fas fa-lock" style="margin-right:8px;font-size:16px;color:#fbbf24;"></i> Secure Access Portal</h2>
+            <p>Authenticate to access the IRERC Management System</p>
+          </div>
+
+          <!-- Auth Tabs -->
+          <div class="auth-tabs">
+            <button class="auth-tab active" onclick="switchAuthTab('login')" id="tab-login-btn">
+              <i class="fas fa-sign-in-alt" style="margin-right:5px;"></i> Sign In
+            </button>
+            <button class="auth-tab" onclick="switchAuthTab('register')" id="tab-register-btn">
+              <i class="fas fa-user-plus" style="margin-right:5px;"></i> Register
+            </button>
+          </div>
+
+          <!-- LOGIN TAB -->
+          <div class="auth-tab-pane active" id="pane-login">
+            <div id="login-error" class="auth-error"><i class="fas fa-exclamation-circle"></i> <span></span></div>
+
+            <div class="auth-field">
+              <label><i class="fas fa-envelope" style="margin-right:4px;color:#64748b;"></i> Email Address</label>
+              <input type="email" id="login-email" placeholder="e.g. pi.dereje@aau.edu.et" autocomplete="email">
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-lock" style="margin-right:4px;color:#64748b;"></i> Password</label>
+              <input type="password" id="login-password" placeholder="Enter your password" autocomplete="current-password">
+            </div>
+
+            <button class="auth-btn auth-btn-primary" onclick="handleLogin()" id="login-submit-btn">
+              <i class="fas fa-sign-in-alt"></i> Sign In to Portal
+            </button>
+
+            <div class="auth-divider">DEMO DIRECT ACCESS (ONE-CLICK)</div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Chairperson')">
+                <i class="fas fa-crown" style="color:#f59e0b;"></i> <span>Chairperson</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Vice Chairperson')">
+                <i class="fas fa-user-tie" style="color:#3b82f6;"></i> <span>Vice Chair</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('IRERC Secretary / Administrative Officer')">
+                <i class="fas fa-user-shield" style="color:#10b981;"></i> <span>Secretary</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('IRERC Member / Reviewer')">
+                <i class="fas fa-microscope" style="color:#8b5cf6;"></i> <span>Reviewer</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Investigator')">
+                <i class="fas fa-graduation-cap" style="color:#ec4899;"></i> <span>Investigator</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('System Administrator')">
+                <i class="fas fa-shield-alt" style="color:#ef4444;"></i> <span>Administrator</span>
+              </button>
+            </div>
+
+            <div class="auth-info-box">
+              <p><i class="fas fa-info-circle"></i>
+                <strong>All roles</strong> (Investigator, Reviewer, Chair, Secretary, Admin) sign in with their registered email and password.
+              </p>
+            </div>
+          </div>
+
+          <!-- REGISTER TAB -->
+          <div class="auth-tab-pane" id="pane-register">
+            <div id="reg-error" class="auth-error"><i class="fas fa-exclamation-circle"></i> <span></span></div>
+            <div id="reg-success" class="auth-success"><i class="fas fa-check-circle"></i> <span></span></div>
+
+            <div class="auth-info-box gold">
+              <p><i class="fas fa-user-graduate"></i>
+                <strong>Investigator Self-Registration:</strong> Researchers can create their own account below to submit protocols for ethical review.
+              </p>
+            </div>
+
+            <div class="auth-field">
+              <label><i class="fas fa-user" style="margin-right:4px;color:#64748b;"></i> Full Name (with Title)</label>
+              <input type="text" id="reg-name" placeholder="e.g. Dr. Abebe Kebede">
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-envelope" style="margin-right:4px;color:#64748b;"></i> Official Email Address</label>
+              <input type="email" id="reg-email" placeholder="e.g. abebe.kebede@aau.edu.et">
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-phone" style="margin-right:4px;color:#64748b;"></i> Telephone (Optional)</label>
+              <input type="tel" id="reg-phone" placeholder="+251 91 xxx xxxx">
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-hospital" style="margin-right:4px;color:#64748b;"></i> Institution / Affiliation</label>
+              <input type="text" id="reg-institution" placeholder="e.g. Addis Ababa University">
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-graduation-cap" style="margin-right:4px;color:#64748b;"></i> Department</label>
+              <input type="text" id="reg-department" placeholder="e.g. School of Public Health">
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-lock" style="margin-right:4px;color:#64748b;"></i> Create Password</label>
+              <input type="password" id="reg-password" placeholder="Minimum 6 characters">
+              <div class="field-hint">Use a strong password with letters, numbers, and symbols.</div>
+            </div>
+            <div class="auth-field">
+              <label><i class="fas fa-lock" style="margin-right:4px;color:#64748b;"></i> Confirm Password</label>
+              <input type="password" id="reg-password2" placeholder="Re-enter your password">
+            </div>
+
+            <button class="auth-btn auth-btn-gold" onclick="handleRegister()" id="reg-submit-btn">
+              <i class="fas fa-user-plus"></i> Register as Investigator
+            </button>
+
+            <div class="auth-divider">OTHER ROLE TYPES</div>
+
+            <div class="auth-info-box">
+              <p><i class="fas fa-users-cog"></i>
+                <strong>Committee Members, Chair, Secretary:</strong> Your account is created by the IRERC Secretary or System Administrator.
+                Contact the Secretariat at <strong>sec.solomon@aahb.gov.et</strong> to be registered.
+              </p>
+            </div>
+          </div>
+
+          <div class="auth-footer">
+            <p>&copy; 2026 Addis Ababa City Administration Health Bureau &bull; AAPHREML-IRERC &bull; <a href="#">Terms</a> &bull; <a href="#">Privacy</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MAIN APP LAYOUT (hidden until authenticated) -->
+  <!-- ============================================================ -->
+  <div id="app-layout" style="display:none;">
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-emblem" style="background:transparent;box-shadow:none;padding:0;">
+          <img src="Logo File.png" alt="Addis Ababa City Administration Health Bureau Logo" style="width:44px;height:44px;object-fit:cover;border-radius:50%;display:block;" onerror="this.style.display='none'">
+        </div>
+        <div class="sidebar-header-text">
+          <h1>AAPHREML-IRERC</h1>
+          <p>Addis Ababa Health Bureau</p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Core Management</div>
+        <a class="nav-item active" data-view="dashboard">
+          <i class="fas fa-th-large"></i>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-item" data-view="protocols">
+          <i class="fas fa-book-medical"></i>
+          <span>Protocols Directory</span>
+        </a>
+        <a class="nav-item" data-view="my-protocols">
+          <i class="fas fa-folder-open"></i>
+          <span>My Protocols</span>
+        </a>
+        <a class="nav-item" data-view="submission">
+          <i class="fas fa-file-medical"></i>
+          <span>Submit Protocol</span>
+        </a>
+
+        <div class="nav-section-title">Review Workflows</div>
+        <a class="nav-item" data-view="my-reviews">
+          <i class="fas fa-clipboard-list"></i>
+          <span>My Reviews</span>
+        </a>
+        <a class="nav-item" data-view="screening">
+          <i class="fas fa-clipboard-check"></i>
+          <span>Admin Screening</span>
+        </a>
+        <a class="nav-item" data-view="assignments">
+          <i class="fas fa-user-tag"></i>
+          <span>Reviewer Assignment</span>
+        </a>
+        <a class="nav-item" data-view="reviews">
+          <i class="fas fa-microscope"></i>
+          <span>Study Assessment</span>
+        </a>
+        <a class="nav-item" data-view="expedited">
+          <i class="fas fa-bolt"></i>
+          <span>Expedited Review</span>
+        </a>
+        <a class="nav-item" data-view="meetings">
+          <i class="fas fa-users"></i>
+          <span>IRERC Meetings</span>
+        </a>
+
+        <div class="nav-section-title">Post-Approval & Governance</div>
+        <a class="nav-item" data-view="monitoring">
+          <i class="fas fa-satellite-dish"></i>
+          <span>Field Monitoring</span>
+        </a>
+        <a class="nav-item" data-view="lifecycle">
+          <i class="fas fa-sync-alt"></i>
+          <span>Amendments & Renewals</span>
+        </a>
+        <a class="nav-item" data-view="committee">
+          <i class="fas fa-user-md"></i>
+          <span>Committee Roster</span>
+        </a>
+        <a class="nav-item" data-view="investigators">
+          <i class="fas fa-user-graduate"></i>
+          <span>Investigators</span>
+        </a>
+        <a class="nav-item" data-view="reports">
+          <i class="fas fa-chart-line"></i>
+          <span>Compliance Reports</span>
+        </a>
+        <a class="nav-item" data-view="audit">
+          <i class="fas fa-shield-alt"></i>
+          <span>Audit Trail</span>
+        </a>
+        <a class="nav-item" data-view="settings">
+          <i class="fas fa-cog"></i>
+          <span>Settings & Demo Data</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;">
+        <div style="display:flex;align-items:center;gap:10px;overflow:hidden;">
+          <div class="user-avatar-wrap">
+            <div class="user-avatar" id="sidebar-user-avatar">DW</div>
+            <span class="user-status-dot"></span>
+          </div>
+          <div class="user-info" style="overflow:hidden;">
+            <div class="user-name" id="sidebar-user-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Dr. Daniel Worku</div>
+            <span class="user-role-badge" id="sidebar-user-role">Chairperson</span>
+          </div>
+        </div>
+        <button class="action-icon-btn" title="Sign Out" onclick="handleLogout()" style="color:#ef4444;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);width:32px;height:32px;border-radius:8px;cursor:pointer;flex-shrink:0;" aria-label="Sign Out">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div id="main-wrapper">
+      <!-- Topbar -->
+      <header id="topbar">
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" id="mobile-toggle" aria-label="Toggle Navigation">
+            <i class="fas fa-bars"></i>
+          </button>
+          <div class="page-breadcrumb">
+            <i class="fas fa-shield-virus"></i>
+            <span>AAPHREML-IRERC Review Portal</span>
+          </div>
+          <span class="portal-badge">
+            <span class="live-dot"></span>
+            System Live
+          </span>
+        </div>
+
+        <div class="topbar-right">
+          <div class="global-search">
+            <i class="fas fa-search" style="color:var(--text-light); font-size:12px;"></i>
+            <input type="text" placeholder="Search protocol, PI, site..." onkeydown="if(event.key==='Enter'){navigateTo('protocols');}">
+            <span class="kbd-shortcut">⌘K</span>
+          </div>
+
+          <button class="action-icon-btn" title="Notifications" onclick="navigateTo('dashboard')">
+            <i class="far fa-bell"></i>
+            <span class="dot"></span>
+          </button>
+
+          <button class="action-icon-btn" title="Refresh Current View" onclick="navigateTo(AppState.currentView)">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+
+          <button class="action-icon-btn" title="Sign Out" onclick="handleLogout()" style="color:#ef4444;margin-left:4px;" aria-label="Sign Out">
+            <i class="fas fa-sign-out-alt"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Page Container -->
+      <main id="content-container"></main>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <?!= include('client/app') ?>
+  <?!= include('client/views') ?>
+
+</body>
+</html>
