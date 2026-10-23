@@ -1,8 +1,8 @@
 # AAPHREML-IRERC Governance & Protocol Management System
 ## Complete Configuration, Deployment & User Operations Manual
 
-**Addis Ababa City Administration Health Bureau**  
-**Institutional Research Ethics Review Committee (IRERC)**  
+**Addis Ababa City Administration Health Bureau**
+**Institutional Research Ethics Review Committee (IRERC)**
 *Federal Democratic Republic of Ethiopia*
 
 ---
@@ -33,7 +33,9 @@ The **AAPHREML-IRERC** platform is an institutional research ethics governance s
 
 The application is architected with a dual deployment model:
 - **Serverless Production Engine:** Runs natively inside **Google Apps Script (GAS)**, backed by **Google Sheets** as a relational database and **Google Drive** as a document repository.
-- **Standalone Offline Client (`preview.html`):** A zero-dependency single-file HTML/CSS/JS distribution with an integrated mock API server, enabling instant evaluation, training, and testing in any modern web browser without internet or server access.
+- **Standalone Demo (`preview.html`):** A compiled single-file client with mock data for evaluation and training. It is not connected to the live backend and should not contain real records or credentials. The page needs no app server; external font and icon CDNs may require internet access.
+
+> **Deployment status:** The source is integrated, but this repository does not include an authorized Apps Script project, deployment URL, or Google credentials. Production becomes live only after the institution completes the owner-authorized setup below.
 
 ### Directory Structure
 ```
@@ -43,9 +45,7 @@ AAPHREML-IRERC/
 ├── appsscript.json           # Manifest configuration with OAuth scopes
 ├── preview.html              # Standalone compiled offline bundle (single file)
 ├── build_preview.ps1         # Automated compiler script to assemble preview.html
-├── test_word_check.ps1       # Developer audit script (Word doc enforcement check)
 ├── Logo File.png             # Addis Ababa City Administration Health Bureau logo
-├── Signature.png             # Official chairperson signature image
 ├── Certeficate of Clearance Letter.docx  # Historical reference document
 ├── PROJECT_MANIFEST.md       # Machine-readable project metadata
 ├── CONFIGURATION_AND_USER_MANUAL.md      # This file
@@ -55,8 +55,9 @@ AAPHREML-IRERC/
 │   └── views.html            # 16 dynamic views, dashboards, modals, & tables
 ├── server/
 │   ├── Config.gs             # Institutional configuration, sheet IDs, drive folder IDs
+│   ├── Assets.gs             # Embedded public logo and private signature loader
 │   ├── Database.gs           # Google Sheets relational database abstraction engine
-│   ├── Auth.gs               # Password hashing, session cookies, and RBAC gatekeeper
+│   ├── Auth.gs               # Password hashing, server-issued session tokens, and RBAC gatekeeper
 │   ├── Users.gs              # Committee roster, investigator profiles, user management
 │   ├── Protocols.gs          # Submission, status transitions, and protocol dockets
 │   ├── Screening.gs          # Administrative completeness checks and classification
@@ -71,6 +72,9 @@ AAPHREML-IRERC/
 │   ├── Communications.gs     # Email notification dispatch
 │   ├── Audit.gs              # Immutable system audit trail
 │   ├── Scanner.gs            # Automated proposal document completeness scanner
+│   ├── Dashboard.gs          # Dashboard metrics and pending actions
+│   ├── DataCollection.gs     # Post-clearance study monitoring
+│   ├── Submission.gs         # Investigator submission and edit workflows
 │   ├── SeedData.gs           # Demonstration data loader with 20 Ethiopian protocols
 │   └── Utils.gs              # Shared utility functions
 ├── styles/
@@ -80,6 +84,8 @@ AAPHREML-IRERC/
     ├── ARCHITECTURE.md       # Full system architecture and data flow
     └── CHANGE_LOG.md         # Version history and organizational changes
 ```
+
+The public logo is embedded from `server/Assets.gs`; the official signature image is stored in restricted Google Drive, not in this source tree.
 
 ---
 
@@ -111,54 +117,36 @@ To deploy this platform as a live institutional web application on Google Worksp
 
 ### Step 3.2: Copy Project Files
 
-#### Option A — Manual (Apps Script IDE)
-In the Google Apps Script IDE, create the following files with matching types:
-
-**Server Script files (`.gs`):**
-- `Code.gs`
-- `server/Config.gs`
-- `server/Database.gs`
-- `server/Auth.gs`
-- `server/Users.gs`
-- `server/Protocols.gs`
-- `server/Screening.gs`
-- `server/Reviews.gs`
-- `server/Assessments.gs`
-- `server/Expedited.gs`
-- `server/Decisions.gs`
-- `server/Lifecycle.gs`
-- `server/Documents.gs`
-- `server/Meetings.gs`
-- `server/Reports.gs`
-- `server/Communications.gs`
-- `server/Audit.gs`
-- `server/Scanner.gs`
-- `server/SeedData.gs`
-- `server/Utils.gs`
-
-**Client & Style files (`.html`):**
-- `Index.html`
-- `styles/styles.html`
-- `client/app.html`
-- `client/views.html`
-
-#### Option B — Automated with Clasp (Recommended)
+#### Automated with Clasp (Recommended)
 ```bash
 npm install -g @google/clasp
 clasp login
-clasp create --title "AAPHREML-IRERC" --type webapp
+```
+
+Create the Apps Script project and first deployment manually in the Apps Script editor. In the repository root, set the newly created project ID in your local `.clasp.json` (the committed file contains only a placeholder), then push:
+
+```json
+{
+  "scriptId": "YOUR_APPS_SCRIPT_PROJECT_ID",
+  "rootDir": "."
+}
+```
+
+Then push the source:
+```bash
 clasp push
 ```
 
 #### Option C — GitHub Actions (Fully Automated)
-Set up the two required GitHub Secrets (see `GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md`):
+The repository includes `.github/workflows/deploy-irerc.yml`. It deploys root-level portal source files and updates an existing deployment; it cannot create the Apps Script project or first deployment. Configure the protected `irerc-production` GitHub environment:
 
-| Secret Name | Value |
-|---|---|
-| `CLASPRC_JSON` | Full contents of your `~/.clasprc.json` after `clasp login` |
-| `SCRIPT_ID` | Your Google Apps Script project ID |
+| Name | Type | Value |
+|---|---|---|---|
+| `CLASPRC_JSON` | Secret | Full contents of `~/.clasprc.json` after `clasp login` |
+| `IRERC_SCRIPT_ID` | Variable | Apps Script project ID |
+| `IRERC_DEPLOYMENT_ID` | Variable | Existing web-app deployment ID |
 
-Every push to `main` will then automatically deploy the latest code.
+Enable required reviewers on the environment. Source changes pushed to `main` update the configured existing deployment. Never commit or share `CLASPRC_JSON`.
 
 ---
 
@@ -169,37 +157,31 @@ Open [`server/Config.gs`](server/Config.gs) to configure your institutional Goog
 ### Step 4.1: Create Google Sheet Database
 1. Go to Google Drive and create a new **Google Sheet**.
 2. Name it: `AAPHREML-IRERC Database`.
-3. Copy the spreadsheet ID from the URL:
-   `https://docs.google.com/spreadsheets/d/`**`1a2B3c4D5e6F7g8H9i0J`**`/edit`
-4. Paste this ID into `server/Config.gs`:
+3. Copy the spreadsheet ID from its URL and set it as `CFG.DB_SS_ID` in `server/Config.gs`:
    ```javascript
    var CFG = {
-     SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID_HERE',
+     DB_SS_ID: 'YOUR_INSTITUTIONAL_DATABASE_ID',
      ...
    };
    ```
 
 ### Step 4.2: Create Google Drive Vault Folder
 1. In Google Drive, create a folder named `AAPHREML_IRERC_Documents`.
-2. Copy the folder ID from the URL:
-   `https://drive.google.com/drive/folders/`**`1AbCdEfGhIjKlMnOpQrSt`**
-3. Paste this ID into `server/Config.gs`:
+2. Copy its ID from the URL and set it as `CFG.FOLDER_ID` in `server/Config.gs`:
    ```javascript
-   FOLDER_ID: 'YOUR_DRIVE_FOLDER_ID_HERE',
+   FOLDER_ID: 'YOUR_INSTITUTIONAL_DRIVE_FOLDER_ID',
    ```
 
+Create a separate institution-owned spreadsheet for scanner output and set its ID in `CFG.SHEET_ID`. All resource IDs are blank in the repository. The database code fails closed until `CFG.DB_SS_ID` is configured; it will not select an active spreadsheet or create a database automatically.
+
 ### Step 4.3: Initialize Tables & System Admin
-1. In the Apps Script code editor, select the function **`initDatabase`** from the function dropdown.
-2. Click **Run** and grant the required permissions (Spreadsheets, Drive, and Email).
-3. The database engine will automatically create all 27 structured sheets (full schema listed in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)).
-4. The default Administrator account will be initialized:
-   - **Email:** `admin@aahb.gov.et`
-   - **Password:** `Irerc@2026`
+1. In the Apps Script editor, run **`initDatabase_`** and grant the requested permissions.
+2. In **Project Settings → Script Properties**, temporarily add `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD`. Use an organization-controlled email and a unique password of at least 12 characters.
+3. Run **`bootstrapAdministrator_`** once. It creates the administrator and deletes both temporary properties. There is no default administrator password.
+4. Sign in with the new account. Do not use `seedDemoData_` with production records.
 
 ### Step 4.4: (Optional) Seed 20 Demonstration Protocols
-To populate the system with 20 realistic Ethiopian research proposals (e.g., Cholera surveillance, Tuberculosis drug resistance, Maternal health mHealth trials):
-1. In the Apps Script editor, select **`seedDemoData`** and click **Run**.
-2. All demonstration records, reviewer assignments, and audit trails will be populated.
+Only use a disposable test project and test spreadsheet. First set the Script Property `ALLOW_DEMO_DATA_SEEDING` to `true`, then sign in as an administrator and use **Seed Realistic Demo Data**. Remove the property immediately afterward. The seeder assigns random, undisclosed passwords to newly created demo users.
 
 ### Step 4.5: Deploy Web Application
 1. Click **Deploy** > **New deployment**.
@@ -207,23 +189,28 @@ To populate the system with 20 realistic Ethiopian research proposals (e.g., Cho
 3. Set configuration:
    - **Description:** `Production Release v1.0`
    - **Execute as:** `Me (your-admin@aahb.gov.et)`
-   - **Who has access:** `Anyone` (or `Anyone within organization`)
+   - **Who has access:** Choose `Anyone within organization` for an internal-only portal, or `Anyone` if external investigators must be able to reach the login page. The portal then applies its own password authentication.
 4. Click **Deploy** and copy the resulting **Web App URL**.
 5. Share this URL with investigators, committee members, and staff.
 
+### Step 4.6: Configure the official signature
+Upload the approved signature image to a restricted Google Drive folder accessible to the deploying account. In Script Properties, set `SIGNATURE_FILE_ID` to that file's ID. The signature image is intentionally excluded from Git and from the public preview; it is returned only to authenticated administrators, secretariat staff, and the chairperson when the permission letter is opened.
+
+Before using any live records, confirm the spreadsheet and Drive IDs in `server/Config.gs` belong to the intended environment. Test a separate copy of those resources first.
+
 ### Critical Configuration Values
 
-| Config Key | Description | Example Value |
+| Config Key | Description | Repository value |
 |---|---|---|
-| `CFG.SPREADSHEET_ID` | Primary Google Sheets database ID | `14vqOZKSZZ6LXYco8NOsiK7-1PCUbUPfYzrVr-7OOAEE` |
-| `CFG.SHEET_ID` | Scanner output spreadsheet ID | `1CgFPhbEKXo1q6i-UROseWyKvBAk4Pl5mb2eqc6xdiKM` |
-| `CFG.FOLDER_ID` | Google Drive document vault folder ID | `1k-1rf7Hu6rzuxYy7PEnRO3XNPN4f8O-5` |
+| `CFG.DB_SS_ID` | Primary Google Sheets database ID | Blank; set an owner-approved ID |
+| `CFG.SHEET_ID` | Scanner output spreadsheet ID | Blank; set an owner-approved ID |
+| `CFG.FOLDER_ID` | Google Drive document vault folder ID | Blank; set an owner-approved ID |
 | `CFG.PROTOCOL_ID_PREFIX` | Protocol code prefix | `AAPHREML-IRERC` |
 | `CFG.ETHICS_QUORUM` | Minimum approvals for quorum | `2` |
 | `CFG.REVIEW_DEADLINE_DAYS` | Working days for reviewer deadline | `7` |
 | `CFG.MAX_FILE_SIZE_MB` | Maximum upload file size | `25` |
 
-> ⚠️ **Do not change `SPREADSHEET_ID`, `SHEET_ID`, or `FOLDER_ID`** without updating the live system. These link to production data stores.
+> Do not configure these values with production IDs until the institution has confirmed resource ownership, permissions, and the intended deployment environment.
 
 ---
 
@@ -238,7 +225,7 @@ Researchers create their own accounts independently:
    - Telephone Number (Optional)
    - Affiliated Health Institution / University
    - Department / Division
-   - Account Password (minimum 6 characters)
+   - Account Password (minimum 12 characters)
 3. Click **Register as Investigator**.
 4. The system validates inputs, provisions an investigator profile, and signs the user in immediately.
 
@@ -252,7 +239,7 @@ Committee members do not self-register. They are provisioned by the **IRERC Secr
    - **Official Email**
    - **Professional Category:** Clinical Expert · Public Health Expert · Ethics/Legal Expert · Laboratory Scientist · Community Representative · Environmental Health Professional
    - **Committee Role:** `IRERC Member / Reviewer` · `Chairperson` · `Vice Chairperson` · `IRERC Secretary / Administrative Officer`
-   - **Initial Password:** Default `Irerc@2026` (member should update after first login)
+   - **Initial Password:** A unique password of at least 12 characters
 5. Click **Provision & Save Member**.
 
 ---
@@ -342,7 +329,7 @@ The script:
 4. Inlines `client/views.html` (replaces `<?!= include('client/views') ?>`)
 5. Writes the result to `preview.html`
 
-The resulting `preview.html` is a fully self-contained, zero-dependency single file that runs in any modern browser without a server.
+The resulting `preview.html` is a standalone single file that runs without the Apps Script backend. External font and icon CDNs may require an internet connection.
 
 > **Important:** `preview.html` is a **compiled artifact**. Do not edit it directly — your changes will be overwritten on the next build. Always edit the source files and run `build_preview.ps1`.
 
@@ -353,8 +340,8 @@ The resulting `preview.html` is a fully self-contained, zero-dependency single f
 ### Q: Clicks in the offline preview don't respond.
 **A:** Ensure you are opening the latest compiled `preview.html`. The global event delegation handles `[data-view]` navigation, mobile drawer toggles, and modal dialogues automatically. Try a hard refresh (`Ctrl+Shift+R`).
 
-### Q: How do I change the default admin password?
-**A:** In Google Sheets, navigate to the `users` tab. Locate the row with email `admin@aahb.gov.et`. Update the password hash, or change it through the User Management panel in the running application.
+### Q: How do I reset an administrator password?
+**A:** There is no self-service password reset. Contact the authorized application owner and follow the institution's controlled recovery procedure. Do not edit password hashes directly in Sheets.
 
 ### Q: How do files get uploaded to Google Drive in production?
 **A:** `Documents.gs` receives base64-encoded file payloads from the browser, creates protocol subfolders inside `CFG.FOLDER_ID`, verifies file size and MIME type, and records metadata in the `protocol_documents` table.
@@ -369,10 +356,10 @@ CFG.COMMITTEE_NAME = 'Your Committee Name';
 All headers, clearance certificates, and email templates adapt automatically.
 
 ### Q: Why is my deployment not updating after a push?
-**A:** Check the **Actions** tab in GitHub. Confirm the `CLASPRC_JSON` and `SCRIPT_ID` secrets are set correctly. If `clasp push` succeeds but the live app is unchanged, you may need to create a new deployment in the Apps Script editor (Deploy > New deployment).
+**A:** Check the **Actions** tab. Confirm the `irerc-production` environment has `CLASPRC_JSON`, `IRERC_SCRIPT_ID`, and `IRERC_DEPLOYMENT_ID` configured. The workflow updates an existing web-app deployment; it does not create a URL or a deployment for you.
 
 ### Q: How do I reset the demo data?
-**A:** Log in as Administrator, navigate to **Settings & Demo Data**, and use the **Seed Demo Data** button. This runs `apiSeedDemoData()` which populates 20 realistic Ethiopian protocols with full workflow state.
+**A:** Use demo mode or a disposable test spreadsheet. Never seed demo records into the production database.
 
 ---
 

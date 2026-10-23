@@ -15,19 +15,19 @@
 | **Organization** | Addis Ababa City Administration Health Bureau |
 | **Committee** | Institutional Research Ethics Review Committee (IRERC) |
 | **Country** | Federal Democratic Republic of Ethiopia |
-| **Version** | 1.0.0 (Production Release) |
-| **Last Updated** | October 2026 |
-| **Status** | ✅ Complete — Production Ready |
+| **Version** | 1.0.0 |
+| **Last Updated** | June 2026 |
+| **Status** | Source integrated; production setup and owner authorization are not complete |
 
 ---
 
 ## What This System Does
 
-A **governance platform** for research ethics review in Addis Ababa.  
+A **governance platform** for research ethics review in Addis Ababa.
 It manages the full lifecycle of research protocol submissions — from initial investigator submission through administrative screening, expert ethical review, committee decision, and official clearance issuance.
 
-**Six user roles:** Investigator · Reviewer · Secretary · Vice Chairperson · Chairperson · Administrator  
-**Two deployment modes:** Live (Google Apps Script) · Offline Demo (`preview.html`)
+**Six user roles:** Investigator · Reviewer · Secretary · Vice Chairperson · Chairperson · Administrator
+**Deployment targets:** Google Apps Script (requires owner setup) · Standalone mock-data preview (`preview.html`)
 
 ---
 
@@ -37,11 +37,10 @@ It manages the full lifecycle of research protocol submissions — from initial 
 |---|---|---|
 | **Application start (production)** | `Code.gs` | `doGet(e)` serves the web app via GAS |
 | **Main HTML shell** | `Index.html` | Auth screen + app layout; loaded by `doGet()` |
-| **Offline standalone demo** | `preview.html` | Compiled single-file; open in any browser |
+| **Offline standalone demo** | `preview.html` | Compiled single-file with mock data; open in any browser |
 | **System configuration** | `server/Config.gs` | All IDs, constants, business rules |
 | **Build tool** | `build_preview.ps1` | Compiles preview.html from source files |
-| **CI/CD deploy** | `.github/workflows/deploy.yml` | Pushes to GAS on merge to `main` |
-| **GitHub Pages** | `.github/workflows/pages.yml` | Publishes `preview.html` as live demo |
+| **CI/CD deploy** | `.github/workflows/deploy-irerc.yml` | Optional; pushes sources and updates a configured existing GAS deployment |
 
 ---
 
@@ -49,7 +48,7 @@ It manages the full lifecycle of research protocol submissions — from initial 
 
 | File | Purpose |
 |---|---|
-| `Index.html` | Root HTML container; includes styles, app.html, views.html via GAS `include()` |
+| `Index.html` | Root HTML container; includes styles and client files via private GAS `include_()` |
 | `client/app.html` | Application state (`AppState`), hash router, auth handlers, mock API bridge |
 | `client/views.html` | 16 dynamic view renderers, dashboards, modals, tables, clearance certificate |
 | `styles/styles.html` | Complete design system: CSS variables, layout, components, responsive styles |
@@ -62,11 +61,11 @@ All backend files live in `server/` and run on Google Apps Script (V8 engine).
 
 | File | Responsibility |
 |---|---|
-| `server/Config.gs` | Central config object `CFG`, roles `ROLES`, status constants `STATUS`, table names `TABLES`, assessment criteria |
-| `server/Database.gs` | `dbGetAll()`, `dbFindById()`, `dbFind()`, `dbInsert()`, `dbUpdate()` — relational abstraction over Google Sheets |
-| `server/Auth.gs` | `loginUser()`, `logoutUser()`, `getSessionUser()`, `requireRole()`, password hashing, RBAC enforcement |
-| `server/Users.gs` | `getCommitteeMembers()`, `saveCommitteeMember()`, `registerInvestigator()` |
-| `server/Submission.gs` | `submitNewProtocol()`, `validateSubmissionData_()`, `generateNextProtocolCode()`, edit/resubmit |
+| `server/Config.gs` | Central configuration, roles, statuses, table names, and Google resource IDs |
+| `server/Database.gs` | Google Sheets-backed database helpers |
+| `server/Auth.gs` | Password login, server-issued expiring sessions, role checks, and one-time administrator bootstrap |
+| `Code.gs` | Public `api*` endpoints; API wrappers validate session tokens and apply authorization |
+| `server/Users.gs` | Committee member and investigator account operations |
 | `server/Screening.gs` | `markProtocolReceived()`, `performAdministrativeCheck()` — completeness gate |
 | `server/Reviews.gs` | `assignReviewersToProtocol()`, `reassignReviewer()`, `declareReviewerCoi()` |
 | `server/Assessments.gs` | `prepareAssessmentForm()`, `submitCompletedAssessment()`, 20-point criteria scoring |
@@ -90,13 +89,14 @@ All backend files live in `server/` and run on Google Apps Script (V8 engine).
 
 All configuration is centralized in `server/Config.gs` in the `CFG` object.
 
-**Critical identifiers — do not change without updating the live system:**
+**Resource identifiers:** No confirmed Google resource IDs are included. These values are blank and must be set to owner-approved resources before initialization.
 
 | Config Key | Value | Description |
 |---|---|---|
-| `CFG.SPREADSHEET_ID` | `14vqOZKSZZ6LXYco8NOsiK7-1PCUbUPfYzrVr-7OOAEE` | Primary Google Sheets database |
-| `CFG.SHEET_ID` | `1CgFPhbEKXo1q6i-UROseWyKvBAk4Pl5mb2eqc6xdiKM` | Scanner output spreadsheet |
-| `CFG.FOLDER_ID` | `1k-1rf7Hu6rzuxYy7PEnRO3XNPN4f8O-5` | Google Drive document vault root |
+| `CFG.DB_SS_ID` | Blank | Primary Google Sheets database |
+| `CFG.SHEET_ID` | Blank | Scanner output spreadsheet |
+| `CFG.FOLDER_ID` | Blank | Google Drive document vault root |
+| `SIGNATURE_FILE_ID` | Script Property; unset | Restricted Drive signature image |
 | `CFG.PROTOCOL_ID_PREFIX` | `AAPHREML-IRERC` | Protocol code prefix (e.g. `AAPHREML-IRERC-2026-0001`) |
 | `CFG.ETHICS_QUORUM` | `2` | Minimum approvals for ethics quorum |
 | `CFG.REVIEW_DEADLINE_DAYS` | `7` | Working days for reviewer deadline |
@@ -108,7 +108,7 @@ All configuration is centralized in `server/Config.gs` in the `CFG` object.
 
 | Storage | Technology | Contents |
 |---|---|---|
-| **Primary database** | Google Sheets (`SPREADSHEET_ID`) | 27 relational tables: users, protocols, assessments, decisions, audit logs, etc. |
+| **Primary database** | Google Sheets (`DB_SS_ID`) | Relational tables: users, protocols, assessments, decisions, audit logs, etc. |
 | **Document vault** | Google Drive (`FOLDER_ID`) | Uploaded protocol documents, versioned by amendment |
 | **Scanner output** | Google Sheets (`SHEET_ID`) | Document completeness checks and extracted data |
 | **Sessions** | GAS `PropertiesService` | Server-side session tokens (production only) |
@@ -119,12 +119,11 @@ All configuration is centralized in `server/Config.gs` in the `CFG` object.
 
 | Service | Purpose | How Configured |
 |---|---|---|
-| **Google Apps Script** | Runtime engine | Deployed via `clasp push`; `scriptId` in `.clasp.json` / GitHub secret |
-| **Google Sheets** | Relational database | IDs hardcoded in `server/Config.gs` |
-| **Google Drive** | Document vault | Folder ID in `server/Config.gs` |
+| **Google Apps Script** | Runtime engine | Deployed via `clasp`; configure project ID in `.clasp.json` or GitHub environment |
+| **Google Sheets** | Relational database | Owner-configured IDs in `server/Config.gs` |
+| **Google Drive** | Document vault | Owner-configured folder ID in `server/Config.gs` |
 | **Gmail / MailApp** | Email notifications | Uses the deploying user's Google account |
-| **GitHub Actions** | CI/CD pipeline | `.github/workflows/deploy.yml` and `pages.yml` |
-| **GitHub Pages** | Live demo hosting | Publishes `preview.html` as `index.html` |
+| **GitHub Actions** | Optional CI/CD pipeline | `.github/workflows/deploy-irerc.yml`; requires protected environment settings |
 | **Google Fonts** | Typography | CDN: Outfit, Plus Jakarta Sans, JetBrains Mono |
 | **Font Awesome** | Icons | CDN 6.4.0 |
 
@@ -133,25 +132,25 @@ All configuration is centralized in `server/Config.gs` in the `CFG` object.
 ## Google Integrations
 
 ### GitHub → Google Apps Script
-Every push to `main` automatically deploys all source files to GAS via `clasp push`.
-
-### GitHub → GitHub Pages
-Every push to `main` publishes `preview.html` as the live interactive demo.
+When configured, the `irerc-production` environment workflow pushes source files and updates the existing deployment on `main`. It does not provision a project or initial deployment.
 
 ### GAS → Google Sheets
 The backend reads and writes all protocol data through the `Database.gs` abstraction layer.
 
 ### GAS → Google Drive
-`Documents.gs` uploads protocol files to versioned per-protocol subfolders.  
-`Code.gs` creates clearance letter documents directly in Drive via `DocumentApp`.
+`Documents.gs` uploads protocol files to versioned per-protocol subfolders.
+The official signature is loaded from a restricted Drive file only for an authenticated administrator, secretary, or chairperson when the facility-access letter is opened.
 
 ---
 
 ## Deployment
 
-### Production (Recommended)
-1. Set GitHub secrets: `CLASPRC_JSON` (clasp auth) and `SCRIPT_ID` (GAS project ID)
-2. Push to `main` — GitHub Actions handles the rest automatically
+### Production setup
+1. Create an institution-owned Apps Script project and confirm the Google Sheets and Drive resource IDs in `server/Config.gs`.
+2. Push the source, initialize the database, create the first administrator through the one-time Script Properties bootstrap, and configure `SIGNATURE_FILE_ID`.
+3. Create the first web-app deployment and record its deployment ID.
+4. Optionally configure the protected `irerc-production` GitHub environment with secret `CLASPRC_JSON` and variables `IRERC_SCRIPT_ID` and `IRERC_DEPLOYMENT_ID`.
+5. Test with non-production data before enabling real use.
 
 ### Manual
 ```powershell
@@ -161,12 +160,12 @@ npm install -g @google/clasp
 # Authenticate
 clasp login
 
-# Set script ID in .clasp.json
+# Set the Apps Script project ID in .clasp.json
 # Push all files
 clasp push --force
 
-# Deploy web app
-clasp deploy --description "Manual deployment"
+# Update an existing deployment after it is created
+clasp update-deployment <deploymentId> --description "Manual deployment"
 ```
 
 ### Offline Demo
@@ -185,9 +184,8 @@ Open preview.html in any browser — no installation required
 
 | File | Location | Purpose | Notes |
 |---|---|---|---|
-| `Logo File.png` | Project root | Addis Ababa City Administration Health Bureau logo | Used in clearance certificate; must stay at root |
-| `Signature.png` | Project root | Official chairperson signature | Used in clearance certificate; must stay at root |
-| `Certeficate of Clearance Letter.docx` | Project root | Historical reference clearance letter template | Do not delete; reference document |
+| Public logo | Embedded in `server/Assets.gs` | Portal branding | Included in the source and demo |
+| Official signature | Restricted Google Drive file | Clearance certificate | Set `SIGNATURE_FILE_ID` Script Property; excluded from Git and demo |
 
 ---
 
@@ -206,12 +204,15 @@ Open preview.html in any browser — no installation required
 
 ## Security Notes
 
-- **Never commit** `.clasprc.json`, `credentials.json`, `.env`, or any `*.key.json` file — all in `.gitignore`
-- The `.clasp.json` `scriptId` field currently contains a placeholder (`YOUR_APPS_SCRIPT_ID_HERE`) — the real ID is injected at deploy time from the `SCRIPT_ID` GitHub secret
-- Passwords are SHA-256 hashed before storage in Google Sheets
-- All API calls are RBAC-gated in `Auth.gs` — no function is publicly accessible without role verification
+- **Never commit** `.clasprc.json`, `credentials.json`, `.env`, or any `*.key.json` file
+- The `.clasp.json` project ID is deliberately a placeholder; set it only for an authorized deployment
+- Protected API endpoints require server-issued eight-hour session tokens; Google sign-in is disabled until a verifiable OAuth flow is implemented
+- The official signature is stored outside the repository
+- Password hashes use per-account salted SHA-256, not a password-specific slow KDF; this is a residual limitation before production use with sensitive data
 - Document access requires COI declaration before a reviewer can open files
-- All state changes use `withTransactionLock()` to prevent concurrent modification
+- Multi-write workflows use `withTransactionLock()` where implemented; verify each workflow's locking and recovery behavior before production use
+- Database access fails closed until `CFG.DB_SS_ID` is configured; the app will not create or select an unconfigured spreadsheet
+- No Apps Script project, deployment, Google authorization, or resource access is confirmed. An authorized owner must create the first project and deployment manually.
 
 ---
 
@@ -231,7 +232,7 @@ Open preview.html in any browser — no installation required
 
 ```
 AAPHREML-IRERC/
-├── Code.gs                    ← START HERE (production)
+├── Code.gs                    ← Apps Script entry point and API dispatcher
 ├── Index.html                 ← Main HTML shell
 ├── preview.html               ← START HERE (demo/offline)
 ├── appsscript.json            ← GAS manifest
@@ -241,10 +242,7 @@ AAPHREML-IRERC/
 ├── PROJECT_MANIFEST.md        ← This file
 ├── CONFIGURATION_AND_USER_MANUAL.md
 ├── GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md
-├── Logo File.png              ← Bureau logo (must stay at root)
-├── Signature.png              ← Chairperson signature (must stay at root)
-├── Certeficate of Clearance Letter.docx  ← Historical reference
-├── test_word_check.ps1        ← Dev audit script
+├── Logo File.png              ← Public logo source (embedded at build time)
 │
 ├── client/
 │   ├── app.html               ← State, router, auth, mock API
@@ -265,8 +263,7 @@ AAPHREML-IRERC/
 │
 └── .github/
     └── workflows/
-        ├── deploy.yml         ← GAS deployment
-        └── pages.yml          ← GitHub Pages
+        └── deploy-irerc.yml   ← Optional GAS deployment workflow
 ```
 
 ---

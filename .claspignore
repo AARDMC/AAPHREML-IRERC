@@ -1,0 +1,17 @@
+**/**
+**
+!appsscript.json
+!Code.gs
+!Index.html
+!client/
+!client/**/
+!client/*.html
+!client/**/*.html
+!server/
+!server/**/
+!server/*.gs
+!server/**/*.gs
+!styles/
+!styles/**/
+!styles/*.html
+!styles/**/*.html

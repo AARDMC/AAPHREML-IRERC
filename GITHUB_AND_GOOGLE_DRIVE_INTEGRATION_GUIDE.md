@@ -1,195 +1,39 @@
-# Seamless GitHub & Google Drive Integration Guide
-## AAPHREML-IRERC Research Protocol Governance Platform
+# GitHub and Google Integration
 
-**Addis Ababa City Administration Health Bureau**  
-**Institutional Research Ethics Review Committee (IRERC)**  
-*Federal Democratic Republic of Ethiopia*
+The portal runs on Google Apps Script (GAS). Google Sheets stores application records, Google Drive stores uploaded documents, and GitHub stores and reviews source code. This repository does not include Google credentials, a project ID, a deployment ID, or confirmation that any configured resources exist or are accessible.
 
----
+## Google Apps Script setup
 
-## 1. Executive Summary: The Seamless Ecosystem
+An authorized institutional owner must:
 
-**Yes, the system is designed from the ground up to integrate seamlessly with both GitHub and Google Drive.**
+1. Create an Apps Script web-app project and enable the Apps Script API for the deploying account.
+2. Create institution-owned spreadsheets for the application database and scanner output, plus a restricted Drive folder for protocol documents.
+3. Set `CFG.DB_SS_ID`, `CFG.SHEET_ID`, and `CFG.FOLDER_ID` in `server/Config.gs` to those approved resource IDs. The values are blank in the repository; do not use production resources until ownership, permissions, and backup/retention policies are confirmed.
+4. Authenticate clasp with an institution-authorized account and set the new Apps Script project ID in the local `.clasp.json`. The committed file intentionally has a placeholder ID. Push with `clasp push`.
+5. Run `initDatabase_()` in the Apps Script editor and authorize the requested services. Use Script Properties `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 12 characters to run `bootstrapAdministrator_()` once. The setup properties are deleted after successful bootstrap.
+6. Upload the chairperson signature to restricted Drive storage and set its ID as the `SIGNATURE_FILE_ID` Script Property. The signature is excluded from Git and the preview; an authorized API fetches it only when needed.
+7. Create the first web-app deployment manually. Test using non-production data and confirm execution identity and access policy before connecting institutional records.
 
-Each platform handles the specific domain it excels at:
+The application uses password login and hashed, eight-hour server sessions. All protected API endpoints require a valid session. Google sign-in is disabled until a verifiable OAuth flow is available. New account passwords must be at least 12 characters and unique across accounts. Hashes use per-account salted SHA-256, which is not a slow password KDF.
 
-```mermaid
-flowchart TD
-    subgraph GitHub ["1. GitHub (Engineering & CI/CD)"]
-        Repo["Git Repository\n(Source Code & Releases)"]
-        GHA["GitHub Actions CI/CD\n(.github/workflows/deploy.yml)"]
-        GHPage["GitHub Pages\n(Live Interactive Web Demo)"]
-        Repo --> GHA
-        Repo --> GHPage
-    end
+Demo data seeding is disabled by default. Set `ALLOW_DEMO_DATA_SEEDING=true` only in a disposable test project; demo accounts receive random passwords that are not exposed to users.
 
-    subgraph GAS ["2. Google Apps Script (Production Runtime)"]
-        WebApp["AAPHREML-IRERC Web App\n(doGet & API Dispatcher)"]
-        GHA -->|Automated Clasp Push| WebApp
-    end
+## Optional GitHub Actions deployment
 
-    subgraph GoogleDrive ["3. Google Drive (Document Evidence Vault)"]
-        RootFolder["AAPHREML-IRERC Vault"]
-        ProtoFolder["Protocol Subfolders\n(IRERC-2026-0001/)"]
-        DocVersions["Versioned Files\n(v1.0, v2.0 Amendments)"]
-        RootFolder --> ProtoFolder --> DocVersions
-    end
+The workflow is [`.github/workflows/deploy-irerc.yml`](.github/workflows/deploy-irerc.yml). It runs on demand or on source changes pushed to `main`, pushes the portal source, and updates an existing Apps Script web-app deployment. It does **not** create the Apps Script project, create the first deployment, authorize Google, or configure Sheets/Drive resources.
 
-    subgraph GoogleSheets ["4. Google Sheets (Relational Database)"]
-        DB["27 Structured Tables\n(Protocols, Users, Assessments, Audits)"]
-    end
+After manually creating the project and first deployment, configure the protected GitHub environment `irerc-production`:
 
-    subgraph Users ["5. Stakeholders"]
-        PI["Investigators / Researchers"]
-        REV["Committee Members / Reviewers"]
-        SEC["IRERC Secretariat & Chair"]
-    end
-
-    Users -->|Browser Access| WebApp
-    WebApp <--> DB
-    WebApp <-->|Upload & Stream Files| GoogleDrive
-    REV -->|COI Cleared| DocVersions
-```
-
-- **GitHub** manages the source code, version history, peer reviews, issues, and automated continuous deployment (CI/CD) to Google Apps Script. It also hosts the standalone demo live via **GitHub Pages**.
-- **Google Drive** acts as the secure, institutional Document Vault for all research proposals, signed informed consent forms, investigator CVs, data collection tools, ethical approval certificates, and progress reports.
-- **Google Sheets** acts as the serverless relational database engine storing all metadata, users, assignments, and audit trails.
-
----
-
-## 2. GitHub Integration: Source Code, CI/CD & GitHub Pages
-
-### A. Automatic Deployment via GitHub Actions
-Every time you push changes or merge a pull request into `main`, GitHub Actions automatically pushes the code directly into your live Google Apps Script web app using **Google Clasp**.
-
-The workflow is pre-configured in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
-
-```yaml
-name: Deploy to Google Apps Script
-on:
-  push:
-    branches: [ main ]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - run: npm install -g @google/clasp
-      - name: Deploy
-        env:
-          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
-          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
-        run: |
-          echo "$CLASPRC_JSON" > ~/.clasprc.json
-          clasp push --force
-          clasp deploy --description "Automated deployment from GitHub commit ${{ github.sha }}"
-```
-
-#### How to Configure GitHub Actions (One-Time Setup):
-1. On your local machine, install Google Clasp and log in:
-   ```bash
-   npm install -g @google/clasp
-   clasp login
-   ```
-2. Open your generated authentication file:
-   - On Windows: `C:\Users\<YourUser>\.clasprc.json`
-   - On Mac/Linux: `~/.clasprc.json`
-3. In your GitHub repository, go to **Settings** > **Secrets and variables** > **Actions** > **New repository secret**.
-4. Add two secrets:
-   - **`CLASPRC_JSON`**: Paste the entire JSON content of your `~/.clasprc.json` file.
-   - **`SCRIPT_ID`**: Paste your Google Apps Script project ID (found in Apps Script Project Settings).
-5. From now on, whenever you type `git push origin main`, your live Google Apps Script web application updates in under 60 seconds without manual copy-pasting.
-
----
-
-### B. Live Public Web Demo via GitHub Pages
-The repository includes [`.github/workflows/pages.yml`](.github/workflows/pages.yml), which automatically publishes the compiled [`preview.html`](preview.html) to **GitHub Pages**.
-
-#### How to Enable GitHub Pages:
-1. In your GitHub repository, navigate to **Settings** > **Pages**.
-2. Under **Build and deployment** > **Source**, choose **GitHub Actions**.
-3. Push to `main`.
-4. Your platform will be hosted live on:
-   ```
-   https://<your-organization>.github.io/<your-repo-name>/
-   ```
-5. Anyone on the ethics committee, leadership team, or hospital management can test and review the interactive platform from any phone, tablet, or laptop immediately.
-
----
-
-## 3. Google Drive Integration: Secure Protocol Vault
-
-### A. Automatic Folder Hierarchy
-When an investigator submits a research protocol (e.g. `AAPHREML-IRERC-2026-0001`), the server ([`server/Utils.gs`](server/Utils.gs#L142-L148)) automatically creates the folder structure inside Google Drive:
-
-```
-Google Drive/
-└── AAPHREML_IRERC_Documents/                ← Root Folder (Config.gs: CFG.FOLDER_ID)
-    ├── AAPHREML-IRERC-2026-0001/            ← Protocol Subfolder
-    │   ├── AAPHREML-IRERC-2026-0001_Protocol_v1.0_Proposal.docx
-    │   ├── AAPHREML-IRERC-2026-0001_InformedConsent_v1.0_Amharic.docx
-    │   ├── AAPHREML-IRERC-2026-0001_Tools_v1.0_Questionnaire.docx
-    │   └── AAPHREML-IRERC-2026-0001_PI_CV_BioethicsCert.docx
-    ├── AAPHREML-IRERC-2026-0002/
-    └── AAPHREML-IRERC-2026-0003/
-```
-
-### B. Immutable Version Control
-When an investigator submits an amendment or correction:
-1. The server identifies the existing document slot in the database.
-2. The document version is incremented automatically (e.g., from `v1.0` to `v2.0`).
-3. The revised file is saved with the new version stamp:
-   `AAPHREML-IRERC-2026-0001_Protocol_v2.0_Revised_Proposal.docx`
-4. The previous version (`v1.0`) is **never overwritten**—both files remain preserved in Google Drive for regulatory audits.
-5. An immutable entry is recorded in the `document_versions` table and logged in the system `audit_trail`.
-
-### C. Direct Streaming & In-Browser Viewer
-In [`client/views.html`](client/views.html#L1300-L1360):
-- Reviewers and committee members click **Download & Review**.
-- The platform uses the secure Google Drive preview URL (`https://drive.google.com/file/d/<fileId>/view`).
-- Documents open inside the browser without requiring external software.
-
-### D. Enforced Conflict of Interest (COI) Gate
-- Before a reviewer can access Google Drive links for a protocol, the platform verifies their COI clearance.
-- If COI is not declared, document URLs remain locked and masked.
-- Once the reviewer declares `No Conflict Declared`, the Google Drive access links activate immediately.
-
----
-
-## 4. Summary of Configuration Parameters
-
-All Drive and Spreadsheet settings are centralized in [`server/Config.gs`](server/Config.gs):
-
-| Parameter | Description | Example Value |
+| Name | Environment setting | Purpose |
 |---|---|---|
-| `SPREADSHEET_ID` | Google Sheet relational database ID | `1b2C3d4E5f6G7h8I9j0K...` |
-| `DRIVE_FOLDER_ID` | Root Google Drive folder ID for document vault | `1xYzAbCdEfGhIjKlMnOp...` |
-| `ROOT_FOLDER_NAME` | Display name of the Google Drive archive | `AAPHREML_IRERC_Documents` |
-| `MAX_FILE_SIZE_MB` | Maximum allowed document upload size | `25` |
-| `ALLOWED_MIME_TYPES` | Permitted upload formats for the **Proposal Structural Scanner** | **DOCX, DOC only** (Microsoft Word) — PDF, XLSX, ZIP are rejected by the scanner. PDF/other formats may be accepted for non-scanned supporting attachments at the server's discretion. |
+| `CLASPRC_JSON` | Secret | Authorized clasp credentials JSON |
+| `IRERC_SCRIPT_ID` | Variable | Apps Script project ID |
+| `IRERC_DEPLOYMENT_ID` | Variable | Existing web-app deployment ID to update |
 
----
+Use required reviewers for this production environment. The workflow writes credentials only to the ephemeral runner. Never commit or share them.
 
-## 5. Typical Continuous Workflow
+## Preview and assets
 
-1. **Local Development:**
-   - Make code edits to client HTML/JS or server `.gs` files.
-   - Run `powershell -ExecutionPolicy Bypass -File .\build_preview.ps1` to test changes locally in [`preview.html`](preview.html).
-2. **Git Commit & Push:**
-   ```bash
-   git add .
-   git commit -m "Update reviewer assessment workflow"
-   git push origin main
-   ```
-3. **Automated CI/CD:**
-   - **GitHub Actions** pushes the new code to the live Google Apps Script project.
-   - **GitHub Pages** updates the live web preview.
-4. **Live Execution:**
-   - **Investigators** (and System Administrators only) submit protocols via the web interface.
-   - All four required protocol documents must be uploaded as **Microsoft Word files (`.docx` or `.doc`)**. PDF and other formats are rejected by the Proposal Structural Scanner.
-   - Documents are stored in **Google Drive** under the protocol's dedicated subfolder.
-   - **Reviewers** declare COI and review documents directly from Drive (after COI clearance).
-   - **Reviewers** may also access IRERC Meeting agendas, dockets, and quorum confirmations.
-   - Ethical clearance certificates are generated and archived upon committee approval.
+`preview.html` is a local standalone mock-data demo built from `Index.html`, `client/`, and `styles/`. It does not connect to Apps Script, Sheets, or Drive. The public logo is embedded in the app source. No GitHub Pages publication is configured. Do not use real records or credentials in the preview.
+
+The official chairperson signature must remain in restricted Drive storage, configured through `SIGNATURE_FILE_ID`. Do not commit it or publish it in the preview.
