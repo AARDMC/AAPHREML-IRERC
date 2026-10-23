@@ -1,0 +1,57 @@
+name: Deploy AAPHREML-IRERC
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Code.gs'
+      - 'Index.html'
+      - 'client/**'
+      - 'server/**'
+      - 'styles/**'
+      - 'appsscript.json'
+      - '.claspignore'
+      - '.clasp.json'
+      - '.github/workflows/deploy-irerc.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aaphreml-irerc-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: irerc-production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install clasp
+        run: npm install --global @google/clasp
+
+      - name: Push and update the web app deployment
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ vars.IRERC_SCRIPT_ID }}
+          DEPLOYMENT_ID: ${{ vars.IRERC_DEPLOYMENT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLASPRC_JSON" || { echo "::error::Set CLASPRC_JSON in the irerc-production environment."; exit 1; }
+          test -n "$SCRIPT_ID" || { echo "::error::Set IRERC_SCRIPT_ID in the irerc-production environment."; exit 1; }
+          test -n "$DEPLOYMENT_ID" || { echo "::error::Set IRERC_DEPLOYMENT_ID in the irerc-production environment."; exit 1; }
+
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          node -e 'const fs = require("fs"); const file = ".clasp.json"; const config = JSON.parse(fs.readFileSync(file, "utf8")); config.scriptId = process.env.SCRIPT_ID; fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");'
+
+          clasp show-file-status
+          clasp push --force
+          clasp update-deployment "$DEPLOYMENT_ID" --description "GitHub commit $GITHUB_SHA"

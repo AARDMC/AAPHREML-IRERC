@@ -4,14 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>AAPHREML-IRERC | Research Protocol Management System</title>
-  
+
   <!-- Modern Institutional Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
-  
-  <?!= include('styles/styles') ?>
+
+  <script>
+    window.APP_ASSETS = {
+      logo: "<?!= logoDataUri ?>"
+    };
+    window.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-portal-logo]').forEach(function(image) {
+        image.src = window.APP_ASSETS.logo;
+      });
+    });
+  </script>
+  <?!= include_('styles/styles') ?>
 </head>
 <body>
 
@@ -83,7 +93,31 @@
     .auth-btn-gold { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 16px rgba(245,158,11,0.3); }
     .auth-btn-gold:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(245,158,11,0.4); }
 
-    .auth-divider { display:flex; align-items:center; gap:12px; margin:20px 0; font-size:11px; color:#94a3b8; }
+    .auth-btn-google {
+      background: #ffffff;
+      color: #1e293b;
+      border: 1.5px solid #cbd5e1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 8px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .auth-btn-google:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+    .auth-btn-google svg {
+      margin-right: 8px;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .auth-btn-google:hover svg {
+      transform: scale(1.1);
+    }
+
+    .auth-divider { display:flex; align-items:center; gap:12px; margin:16px 0; font-size:11px; color:#94a3b8; font-weight:600; letter-spacing:0.5px; }
     .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:#e2e8f0; }
 
     .auth-info-box { background:rgba(37,99,235,0.06); border:1px solid rgba(37,99,235,0.15); border-radius:10px; padding:14px 16px; margin-bottom:18px; }
@@ -118,7 +152,7 @@
       <div class="auth-left">
         <div class="auth-brand">
           <div class="auth-brand-shield" style="background:transparent;box-shadow:none;display:flex;align-items:center;justify-content:center;">
-            <img src="Logo File.png" alt="Addis Ababa City Administration Health Bureau Logo" style="width:56px;height:56px;object-fit:cover;border-radius:50%;display:block;" onerror="this.style.display='none'">
+            <img data-portal-logo alt="Addis Ababa City Administration Health Bureau Logo" style="width:56px;height:56px;object-fit:cover;border-radius:50%;display:block;">
           </div>
           <div class="auth-brand-text">
             <h1>AAPHREML-IRERC</h1>
@@ -187,6 +221,18 @@
           <div class="auth-tab-pane active" id="pane-login">
             <div id="login-error" class="auth-error"><i class="fas fa-exclamation-circle"></i> <span></span></div>
 
+            <button type="button" class="auth-btn auth-btn-google" onclick="handleGoogleAuth('login')" id="google-login-btn">
+              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+                <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.347 2.825.957 4.039l3.007-2.332z"/>
+                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
+              </svg>
+              <span>Google sign-in (demo only)</span>
+            </button>
+
+            <div class="auth-divider">OR SIGN IN WITH EMAIL</div>
+
             <div class="auth-field">
               <label><i class="fas fa-envelope" style="margin-right:4px;color:#64748b;"></i> Email Address</label>
               <input type="email" id="login-email" placeholder="e.g. pi.dereje@aau.edu.et" autocomplete="email">
@@ -200,7 +246,7 @@
               <i class="fas fa-sign-in-alt"></i> Sign In to Portal
             </button>
 
-            <div class="auth-divider">DEMO DIRECT ACCESS (ONE-CLICK)</div>
+            <div class="auth-divider">LOCAL DEMO ROLE SHORTCUTS</div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
               <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Chairperson')">
@@ -237,9 +283,21 @@
 
             <div class="auth-info-box gold">
               <p><i class="fas fa-user-graduate"></i>
-                <strong>Investigator Self-Registration:</strong> Researchers can create their own account below to submit protocols for ethical review.
+                <strong>Investigator Registration:</strong> Google registration is for the offline demo only. Use the form below in the live portal.
               </p>
             </div>
+
+            <button type="button" class="auth-btn auth-btn-google" onclick="handleGoogleAuth('register')" id="google-reg-btn">
+              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+                <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.347 2.825.957 4.039l3.007-2.332z"/>
+                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
+              </svg>
+              <span>Google registration (demo only)</span>
+            </button>
+
+            <div class="auth-divider">OR REGISTER WITH FORM</div>
 
             <div class="auth-field">
               <label><i class="fas fa-user" style="margin-right:4px;color:#64748b;"></i> Full Name (with Title)</label>
@@ -263,7 +321,7 @@
             </div>
             <div class="auth-field">
               <label><i class="fas fa-lock" style="margin-right:4px;color:#64748b;"></i> Create Password</label>
-              <input type="password" id="reg-password" placeholder="Minimum 6 characters">
+              <input type="password" id="reg-password" placeholder="At least 12 characters" autocomplete="new-password">
               <div class="field-hint">Use a strong password with letters, numbers, and symbols.</div>
             </div>
             <div class="auth-field">
@@ -304,7 +362,7 @@
     <aside id="sidebar">
       <div class="sidebar-header">
         <div class="brand-emblem" style="background:transparent;box-shadow:none;padding:0;">
-          <img src="Logo File.png" alt="Addis Ababa City Administration Health Bureau Logo" style="width:44px;height:44px;object-fit:cover;border-radius:50%;display:block;" onerror="this.style.display='none'">
+          <img data-portal-logo alt="Addis Ababa City Administration Health Bureau Logo" style="width:44px;height:44px;object-fit:cover;border-radius:50%;display:block;">
         </div>
         <div class="sidebar-header-text">
           <h1>AAPHREML-IRERC</h1>
@@ -417,10 +475,6 @@
             <i class="fas fa-shield-virus"></i>
             <span>AAPHREML-IRERC Review Portal</span>
           </div>
-          <span class="portal-badge">
-            <span class="live-dot"></span>
-            System Live
-          </span>
         </div>
 
         <div class="topbar-right">
@@ -454,8 +508,8 @@
   <div id="toast-container"></div>
 
   <!-- Scripts -->
-  <?!= include('client/app') ?>
-  <?!= include('client/views') ?>
+  <?!= include_('client/app') ?>
+  <?!= include_('client/views') ?>
 
 </body>
 </html>

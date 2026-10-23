@@ -7,6 +7,7 @@ node_modules/
 clasprc.json
 credentials.json
 *.key.json
+Signature.png
 
 # Environment variables
 .env
