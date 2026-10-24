@@ -17,7 +17,7 @@ var CFG = {
   DB_SS_ID: '',
   ROOT_FOLDER_NAME: 'AAPHREML-IRERC_Documents',
   SHEET_ID: '',
-  FOLDER_ID: '',
+  FOLDER_ID: '1lx-ws8XFPUzMmc4s31UKfHUyYNfdoch',
   SHEET_TAB_NAME: 'Initial Protocol',
   ETHICS_QUORUM: 2,
 
