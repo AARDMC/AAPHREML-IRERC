@@ -64,9 +64,46 @@ function _getBridgeFrame_() {
   return frame;
 }
 
+function _isBridgeFrameSource_(frame, source) {
+  if (!frame || !source) return false;
+  var current = source;
+  for (var depth = 0; depth < 16; depth++) {
+    if (current === frame.contentWindow) return true;
+    try {
+      var parent = current.parent;
+      if (!parent || parent === current) return false;
+      current = parent;
+    } catch (e) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function _postToBridgeFrames_(frame, message, targetOrigin) {
+  if (!frame || !frame.contentWindow) return;
+  var queue = [{ window: frame.contentWindow, depth: 0 }];
+  var discovered = 1;
+  var cursor = 0;
+  while (cursor < queue.length && cursor < 64) {
+    var entry = queue[cursor++];
+    try {
+      entry.window.postMessage(message, targetOrigin);
+    } catch (e) {}
+    if (entry.depth >= 10 || discovered >= 64) continue;
+    try {
+      var frames = entry.window.frames;
+      var count = Math.min(Number(frames.length) || 0, 64 - discovered);
+      for (var i = 0; i < count; i++) {
+        queue.push({ window: frames[i], depth: entry.depth + 1 });
+        discovered++;
+      }
+    } catch (e) {}
+  }
+}
 window.addEventListener('message', function(event) {
   var frame = document.getElementById('irerc-gas-bridge');
-  if (!frame || event.source !== frame.contentWindow || !_isTrustedBridgeOrigin_(event.origin)) return;
+  if (!_isBridgeFrameSource_(frame, event.source) || !_isTrustedBridgeOrigin_(event.origin)) return;
   var message = event.data;
   if (!message || message.channel !== _RPC_CHANNEL_) return;
 
@@ -125,7 +162,7 @@ function _callRpc_(functionName, args) {
       };
       _RPC_PENDING_[requestId] = pending;
       try {
-        frame.contentWindow.postMessage({
+        _postToBridgeFrames_(frame, {
           channel: _RPC_CHANNEL_,
           type: 'call',
           id: requestId,
