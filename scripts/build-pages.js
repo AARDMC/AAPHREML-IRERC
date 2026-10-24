@@ -18,11 +18,14 @@ function read(relativePath) {
 }
 
 let html = read('Index.html');
+const viewsHtml = read('client/views.html');
+const viewsMatch = viewsHtml.match(/^\s*<script\s*>([\s\S]*?)<\/script>\s*$/i);
+if (!viewsMatch) throw new Error('client/views.html must contain one script block.');
 const replacements = [
   ["<?!= include_('styles/styles') ?>", read('styles/styles.html')],
   ["<?!= include_('client/app') ?>", read('client/app.html')],
-  ["<?!= include_('client/views') ?>", read('client/views.html')],
-  ['<?!= logoDataUri ?>', 'data:image/png;base64,' + fs.readFileSync(path.join(root, 'Logo File.png')).toString('base64')]
+  ["<?!= include_('client/views') ?>", '<!-- Loaded on demand after authentication. -->'],
+  ['<?!= logoDataUri ?>', './logo.png']
 ];
 replacements.forEach(function(pair) {
   if (html.indexOf(pair[0]) === -1) throw new Error('Missing Pages template marker: ' + pair[0]);
@@ -39,5 +42,7 @@ if (html.indexOf('<?!') !== -1 || html.indexOf('IRERC_PAGES_CONFIG') !== -1) {
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(path.join(outputDir, 'index.html'), html, 'utf8');
+fs.writeFileSync(path.join(outputDir, 'views.js'), viewsMatch[1], 'utf8');
+fs.copyFileSync(path.join(root, 'Logo File.png'), path.join(outputDir, 'logo.png'));
 fs.writeFileSync(path.join(outputDir, '.nojekyll'), '', 'utf8');
-console.log('Built GitHub Pages site at .pages-site.');
+console.log('Built GitHub Pages site at .pages-site with lazy views and a separate logo asset.');
