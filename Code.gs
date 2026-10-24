@@ -49,6 +49,7 @@ function _dispatch_(fn, args, isAuthenticationEndpoint) {
   var sessionToken = callArgs.length ? String(callArgs.pop() || '') : '';
   var previousUser = _API_SESSION_USER_;
   var previousToken = _API_SESSION_TOKEN_;
+  var previousDbCache = typeof beginDbRequestCache_ === 'function' ? beginDbRequestCache_() : null;
 
   try {
     if (typeof fn !== 'function') {
@@ -69,6 +70,7 @@ function _dispatch_(fn, args, isAuthenticationEndpoint) {
   } finally {
     _API_SESSION_USER_ = previousUser;
     _API_SESSION_TOKEN_ = previousToken;
+    if (typeof endDbRequestCache_ === 'function') endDbRequestCache_(previousDbCache);
   }
 }
 

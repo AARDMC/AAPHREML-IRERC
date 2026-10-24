@@ -23,6 +23,8 @@ The preview file is for layout review only. It has no backend connection, accoun
 - Keep passwords, OAuth/clasp credentials, signature images, and research documents out of Git.
 - Review access controls and account roles before granting users access to research records.
 - Follow institutional backup, retention, incident response, and ethics-record handling policies.
+- New uploaded documents are stored under the configured Drive folder in `AAPHREML-IRERC_Documents/<protocol_id>/`. Proposal scan staging files use `AAPHREML-IRERC_Documents/Proposal Scans/<user_id>/` until attached to a protocol.
+- Existing Drive files are left in place; this source change does not move or delete previously uploaded files.
 - Source cleanup does not erase anything already stored in Sheets or Drive; review existing data separately before production.
 
 ## Security notes
