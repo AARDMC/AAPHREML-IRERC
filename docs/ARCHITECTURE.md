@@ -7,7 +7,7 @@
 
 ## 1. Architecture Overview
 
-The source is a modular Google Apps Script HtmlService application. No Apps Script project, deployment, Google authorization, or resource access is confirmed in this repository; the first project and deployment require owner setup. The compiled local preview has no sample records or backend connection.
+The source is a modular Google Apps Script HtmlService application. The supplied Drive document folder ID is configured in `server/Config.gs`, but its access by Apps Script is not verified. Database/scanner spreadsheet IDs, the Apps Script project, deployment, and Google authorization remain owner setup requirements. The compiled local preview has no sample records or backend connection.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
