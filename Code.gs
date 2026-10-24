@@ -166,17 +166,11 @@ function apiGenerateReport(reportType, filters) { return _dispatch_(generateInst
 function apiGetProtocolAuditTrail(protocolId) { return _dispatch_(getProtocolAuditTrail_, arguments); }
 function apiGetSystemAuditLogs(filters) { return _dispatch_(getSystemAuditLogs_, arguments); }
 
-// ---- 15. System Initialization & Demo Data ----
+// ---- 15. System Initialization ----
 function apiInitDatabase() {
   return _dispatch_(function() {
     requireAuthorizedRole_([ROLES.ADMIN]);
     return initDatabase_();
-  }, arguments);
-}
-function apiSeedDemoData() {
-  return _dispatch_(function() {
-    requireAuthorizedRole_([ROLES.ADMIN]);
-    return seedDemoData_();
   }, arguments);
 }
 
