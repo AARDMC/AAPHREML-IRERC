@@ -8,3 +8,5 @@
 - Replaced fixed meeting examples with records loaded from the Apps Script backend.
 - Kept the official signature in restricted Google Drive storage and excluded it from Git.
 - Clarified that source cleanup does not delete records already stored in Sheets or Drive.
+- Configured the owner-provided Drive folder ID as the document vault in `server/Config.gs`.
+- Left database and scanner spreadsheet IDs unset; Drive access and ownership still require verification.
