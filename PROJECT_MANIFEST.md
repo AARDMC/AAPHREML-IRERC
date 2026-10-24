@@ -32,13 +32,13 @@ The portal manages protocol submission, administrative screening, ethical review
 
 ### Google resources
 
-Resource IDs are blank until an authorized owner configures them.
+The provided Drive folder ID is configured for document storage. Its accessibility from the Apps Script execution account is not verified; database and scanner spreadsheet IDs remain blank.
 
 | Setting | Purpose |
 |---|---|
 | `CFG.DB_SS_ID` | Primary Google Sheets database |
 | `CFG.SHEET_ID` | Scanner output spreadsheet |
-| `CFG.FOLDER_ID` | Restricted Drive document folder |
+| `CFG.FOLDER_ID` | Restricted Drive document folder | User-provided folder ID configured; access not verified |
 | `SIGNATURE_FILE_ID` Script Property | Restricted chairperson signature image |
 
 The signature image must remain in restricted Drive storage and must not be committed to Git.
@@ -57,8 +57,8 @@ Do not configure or trigger production deployment until the workflow and runtime
 
 ### Owner setup
 
-1. Create an institution-owned Apps Script project, database spreadsheet, scanner spreadsheet, and restricted Drive folder.
-2. Set the resource IDs in `server/Config.gs` and authorize the deploying account.
+1. Create an institution-owned Apps Script project plus database and scanner spreadsheets. Use the supplied restricted Drive folder, whose ID is preconfigured in `server/Config.gs`.
+2. Set the spreadsheet IDs in `server/Config.gs`; ensure the executing account can access the spreadsheets and has Editor access to the Drive folder.
 3. Run database initialization and bootstrap the first administrator through temporary Script Properties.
 4. Create the first web-app deployment manually.
 5. Test with non-production resources and confirm access, backup, and retention policies before handling records.
