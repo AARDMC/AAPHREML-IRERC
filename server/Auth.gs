@@ -209,6 +209,13 @@ function bootstrapAdministrator_() {
 }
 
 /**
+ * Owner-run one-time entry point for creating the first administrator.
+ */
+function bootstrapInitialAdministrator() {
+  return bootstrapAdministrator_();
+}
+
+/**
  * Strips sensitive password hash before returning user object to client
  */
 function sanitizeUserForClient_(user) {
