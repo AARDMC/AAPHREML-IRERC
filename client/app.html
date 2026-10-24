@@ -4,13 +4,7 @@
 // ============================================================================
 
 var AppState = {
-  currentUser: {
-    user_id: 'USR-MBR-01',
-    full_name: 'Asmamaw Deguale',
-    email: 'chair.daniel@aahb.gov.et',
-    role: 'Chairperson',
-    is_active: true
-  },
+  currentUser: null,
   currentView: 'dashboard',
   selectedProtocolId: null,
   protocolsCache: [],
@@ -19,32 +13,141 @@ var AppState = {
 };
 
 /**
- * Universal RPC API Caller with GAS Bridge & Local Mock Fallback
+ * GitHub Pages to Apps Script RPC bridge.
+ * The hidden Apps Script iframe accepts calls only from the configured Pages origin.
  */
-function gas(fn) {
-  var args = Array.prototype.slice.call(arguments, 1);
-  return new Promise(function (resolve, reject) {
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
-      if (typeof google.script.run[fn] === 'function') {
-        args.push(getSessionToken_());
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)[fn].apply(null, args);
-      } else {
-        reject(new Error('Function ' + fn + ' not found in Apps Script backend.'));
-      }
-    } else {
-      setTimeout(function() {
-        try {
-          var res = getMockResponse_(fn, args);
-          resolve(res);
-        } catch (e) {
-          reject(e);
-        }
-      }, 350);
+var _RPC_CHANNEL_ = 'aaphreml-irerc-rpc-v1';
+var _RPC_PENDING_ = Object.create(null);
+var _RPC_READY_WAITERS_ = [];
+var _RPC_BRIDGE_ORIGIN_ = '';
+var _RPC_REQUEST_SEQUENCE_ = 0;
+var _RPC_API_ALIASES_ = {
+  deleteFileFromDrive: 'apiDeleteFileFromDrive',
+  generateNextProtocolCode: 'apiGenerateNextProtocolCode',
+  loadForEdit: 'apiLoadForEdit',
+  processFormSubmission: 'apiProcessFormSubmission',
+  processUploadedFile: 'apiProcessUploadedFile'
+};
+
+function hasRpcBridge_() {
+  return !!(window.IRERC_CONFIG && window.IRERC_CONFIG.bridgeUrl);
+}
+
+function _isTrustedBridgeOrigin_(origin) {
+  try {
+    var url = new URL(origin);
+    return url.protocol === 'https:' &&
+      (url.hostname === 'script.google.com' ||
+       url.hostname === 'googleusercontent.com' ||
+       url.hostname.slice(-'.googleusercontent.com'.length) === '.googleusercontent.com');
+  } catch (e) {
+    return false;
+  }
+}
+
+function _getBridgeFrame_() {
+  if (!hasRpcBridge_()) throw new Error('The Apps Script backend URL is not configured for this page.');
+  var frame = document.getElementById('irerc-gas-bridge');
+  if (!frame) {
+    frame = document.createElement('iframe');
+    frame.id = 'irerc-gas-bridge';
+    frame.title = 'AAPHREML-IRERC backend connection';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.setAttribute('referrerpolicy', 'strict-origin');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(frame);
+  }
+  if (frame.dataset.irercBridgeUrl !== window.IRERC_CONFIG.bridgeUrl) {
+    frame.dataset.irercBridgeUrl = window.IRERC_CONFIG.bridgeUrl;
+    frame.src = window.IRERC_CONFIG.bridgeUrl;
+  }
+  return frame;
+}
+
+window.addEventListener('message', function(event) {
+  var frame = document.getElementById('irerc-gas-bridge');
+  if (!frame || event.source !== frame.contentWindow || !_isTrustedBridgeOrigin_(event.origin)) return;
+  var message = event.data;
+  if (!message || message.channel !== _RPC_CHANNEL_) return;
+
+  if (message.type === 'ready') {
+    _RPC_BRIDGE_ORIGIN_ = event.origin;
+    var waiters = _RPC_READY_WAITERS_.splice(0);
+    waiters.forEach(function(waiter) {
+      clearTimeout(waiter.timer);
+      waiter.resolve(frame);
+    });
+    return;
+  }
+
+  var pending = _RPC_PENDING_[message.id];
+  if (!pending) return;
+  delete _RPC_PENDING_[message.id];
+  clearTimeout(pending.timer);
+  if (message.type === 'result') pending.resolve(message.result);
+  else pending.reject(new Error(message.error || 'Apps Script request failed.'));
+});
+
+function _waitForBridge_() {
+  return new Promise(function(resolve, reject) {
+    var frame;
+    try {
+      frame = _getBridgeFrame_();
+    } catch (e) {
+      reject(e);
+      return;
     }
+    if (_RPC_BRIDGE_ORIGIN_) {
+      resolve(frame);
+      return;
+    }
+    var waiter = { resolve: resolve, reject: reject, timer: null };
+    waiter.timer = setTimeout(function() {
+      var index = _RPC_READY_WAITERS_.indexOf(waiter);
+      if (index >= 0) _RPC_READY_WAITERS_.splice(index, 1);
+      reject(new Error('Could not connect to the Apps Script backend. Check the web-app deployment and access settings.'));
+    }, 30000);
+    _RPC_READY_WAITERS_.push(waiter);
   });
 }
+
+function _callRpc_(functionName, args) {
+  return _waitForBridge_().then(function(frame) {
+    return new Promise(function(resolve, reject) {
+      var requestId = 'irerc_' + Date.now() + '_' + (++_RPC_REQUEST_SEQUENCE_);
+      var pending = {
+        resolve: resolve,
+        reject: reject,
+        timer: setTimeout(function() {
+          delete _RPC_PENDING_[requestId];
+          reject(new Error('The Apps Script backend request timed out.'));
+        }, 120000)
+      };
+      _RPC_PENDING_[requestId] = pending;
+      try {
+        frame.contentWindow.postMessage({
+          channel: _RPC_CHANNEL_,
+          type: 'call',
+          id: requestId,
+          functionName: functionName,
+          args: args || []
+        }, _RPC_BRIDGE_ORIGIN_);
+      } catch (e) {
+        clearTimeout(pending.timer);
+        delete _RPC_PENDING_[requestId];
+        reject(e);
+      }
+    });
+  });
+}
+
+function gas(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  var target = _RPC_API_ALIASES_[fn] || fn;
+  args.push(getSessionToken_());
+  return _callRpc_(target, args);
+}
+
 
 function getSessionToken_() {
   try {
@@ -75,45 +178,34 @@ function errMsg(e) {
 }
 
 function callBackend(funcName, args, callback, errorCallback) {
-  showLoader(true);
-
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    var runner = google.script.run
-      .withSuccessHandler(function(response) {
-        showLoader(false);
-        if (response && response.success === false) {
-          showToast(response.error || 'Server error', 'danger');
-          if (errorCallback) errorCallback(response.error);
-        } else {
-          var payload = (response && response.data !== undefined) ? response.data : response;
-          if (callback) callback(payload);
-        }
-      })
-      .withFailureHandler(function(err) {
-        showLoader(false);
-        showToast(err.message || 'Execution failed', 'danger');
-        if (errorCallback) errorCallback(err);
-      });
-
-    // Invoke dynamic function name
-    if (typeof runner[funcName] === 'function') {
-      var requestArgs = (args || []).slice();
-      requestArgs.push(getSessionToken_());
-      runner[funcName].apply(runner, requestArgs);
-    } else {
-      showLoader(false);
-      showToast('API endpoint not found: ' + funcName, 'danger');
-    }
-  } else {
-    // Standalone Browser Preview Mode Fallback
-    console.warn('Running outside GAS container. Simulating endpoint: ' + funcName);
-    setTimeout(function() {
-      showLoader(false);
-      var mock = getMockResponse_(funcName, args);
-      if (callback) callback(mock);
-    }, 250);
+  if (!hasRpcBridge_()) {
+    var unavailable = 'Open the deployed GitHub Pages portal to use the application.';
+    showToast(unavailable, 'warning');
+    if (errorCallback) errorCallback(unavailable);
+    return;
   }
+
+  showLoader(true);
+  var requestArgs = (args || []).slice();
+  requestArgs.push(getSessionToken_());
+
+  _callRpc_(funcName, requestArgs).then(function(response) {
+    showLoader(false);
+    if (response && response.success === false) {
+      showToast(response.error || 'Server error', 'danger');
+      if (errorCallback) errorCallback(response.error);
+      return;
+    }
+    var payload = (response && response.data !== undefined) ? response.data : response;
+    if (callback) callback(payload);
+  }).catch(function(err) {
+    showLoader(false);
+    showToast(err && err.message ? err.message : 'Execution failed', 'danger');
+    if (errorCallback) errorCallback(err);
+  });
 }
+
+
 
 /**
  * Shows / hides full-screen loading spinner
@@ -244,14 +336,6 @@ function navigateTo(viewName, param) {
   closeMobileSidebar();
 }
 
-var USERS_BY_ROLE = {
-  'Chairperson': { user_id: 'USR-MBR-01', full_name: 'Asmamaw Deguale', email: 'chair.daniel@aahb.gov.et', role: 'Chairperson' },
-  'Vice Chairperson': { user_id: 'USR-MBR-02', full_name: 'Dr. Selamawit Bekele', email: 'vchair.selamawit@aahb.gov.et', role: 'Vice Chairperson' },
-  'IRERC Secretary / Administrative Officer': { user_id: 'USR-MBR-03', full_name: 'Alem Nigussie', email: 'sec.solomon@aahb.gov.et', role: 'IRERC Secretary / Administrative Officer' },
-  'IRERC Member / Reviewer': { user_id: 'USR-MBR-04', full_name: 'Binyam Abebe', email: 'rev.binyam@aahb.gov.et', role: 'IRERC Member / Reviewer' },
-  'Investigator': { user_id: 'USR-PI-01', full_name: 'Dr. Dereje Haile', email: 'pi.dereje@aau.edu.et', role: 'Investigator' },
-  'System Administrator': { user_id: 'USR-ADMIN-01', full_name: 'Bureau IT Administrator', email: 'admin@aahb.gov.et', role: 'System Administrator' }
-};
 
 /**
  * Switch Auth Tab (Login vs Register)
@@ -279,64 +363,6 @@ function switchAuthTab(tab) {
     if (paneRegister) paneRegister.classList.remove('active');
     if (paneLogin) paneLogin.classList.add('active');
   }
-}
-
-/**
- * Switch Active User Role (Topbar & Demo Switcher)
- */
-function switchUserRole(roleName) {
-  var target = USERS_BY_ROLE[roleName];
-  if (!target) {
-    target = {
-      user_id: 'USR-' + Math.floor(Math.random()*9000+1000),
-      full_name: roleName === 'Investigator' ? 'Dr. Dereje Haile' :
-                 roleName === 'IRERC Member / Reviewer' ? 'Binyam Abebe' :
-                 roleName === 'Chairperson' ? 'Asmamaw Deguale' :
-                 roleName === 'Vice Chairperson' ? 'Dr. Selamawit Bekele' :
-                 roleName === 'IRERC Secretary / Administrative Officer' ? 'Alem Nigussie' : 'Bureau IT Administrator',
-      email: roleName === 'Investigator' ? 'pi.dereje@aau.edu.et' :
-             roleName === 'IRERC Member / Reviewer' ? 'rev.hanna@aahb.gov.et' :
-             roleName === 'Chairperson' ? 'chair.daniel@aahb.gov.et' :
-             roleName === 'Vice Chairperson' ? 'vchair.selamawit@aahb.gov.et' :
-             roleName === 'IRERC Secretary / Administrative Officer' ? 'sec.solomon@aahb.gov.et' : 'admin@aahb.gov.et',
-      role: roleName,
-      is_active: true
-    };
-  }
-  AppState.currentUser = target;
-
-  var footerName = document.getElementById('sidebar-user-name');
-  if (footerName) footerName.textContent = target.full_name;
-  var footerRole = document.getElementById('sidebar-user-role');
-  if (footerRole) footerRole.textContent = target.role;
-  var avatarEl = document.getElementById('sidebar-user-avatar');
-  if (avatarEl) {
-    var parts = target.full_name.replace('[DEMO DATA] ', '').split(' ');
-    var initials = (parts[0] ? parts[0][0] : 'U') + (parts.length > 1 ? parts[parts.length-1][0] : 'S');
-    avatarEl.textContent = initials.toUpperCase();
-  }
-
-  var roleSelects = document.querySelectorAll('.role-select');
-  roleSelects.forEach(function(sel) { sel.value = target.role; });
-
-  if (typeof applyRoleBasedNav === 'function') {
-    applyRoleBasedNav(target.role);
-  }
-
-  showToast('Switched to ' + target.role + ' (' + target.full_name + ')', 'info');
-  navigateTo('dashboard');
-}
-
-/**
- * Direct One-Click Demo Role Login
- */
-function quickLoginAs(roleName) {
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    showToast('Demo role access is available only in the standalone preview.', 'warning');
-    return;
-  }
-  var target = USERS_BY_ROLE[roleName] || USERS_BY_ROLE['Chairperson'];
-  completeSignIn(target);
 }
 
 /**
@@ -410,14 +436,9 @@ function completeSignIn(user) {
   if (footerRole) footerRole.textContent = user.role;
   var avatarEl = document.getElementById('sidebar-user-avatar');
   if (avatarEl) {
-    var parts = user.full_name.replace('[DEMO DATA] ', '').split(' ');
+    var parts = user.full_name.split(' ');
     var initials = (parts[0] ? parts[0][0] : 'U') + (parts.length > 1 ? parts[parts.length-1][0] : 'S');
     avatarEl.textContent = initials.toUpperCase();
-  }
-
-  var roleSelect = document.querySelector('.role-select');
-  if (roleSelect) {
-    roleSelect.value = user.role;
   }
 
   if (typeof applyRoleBasedNav === 'function') {
@@ -528,179 +549,6 @@ function showRegError_(msg) {
 }
 
 /**
- * Handle One-Click Google Registration / Login
- */
-function handleGoogleAuth(mode) {
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    showToast('Google sign-in is not configured. Use your registered email and password.', 'warning');
-    return;
-  }
-  showGoogleAccountModal(mode);
-}
-
-/**
- * Display interactive Google Account Chooser & Quick Registration Dialog
- */
-function showGoogleAccountModal(mode) {
-  var isRegister = mode === 'register';
-  var existingModal = document.getElementById('google-auth-modal');
-  if (existingModal) existingModal.remove();
-
-  var accounts = [
-    {
-      name: 'Dr. Dereje Haile',
-      email: 'pi.dereje@aau.edu.et',
-      institution: 'Addis Ababa University, School of Public Health',
-      avatar: 'D'
-    },
-    {
-      name: 'Dr. Almaz Tefera',
-      email: 'pi.almaz@sphmmc.edu.et',
-      institution: 'St. Paul Hospital Millennium Medical College',
-      avatar: 'A'
-    },
-    {
-      name: 'Dr. Hiwot Girma',
-      email: 'pi.hiwot@aaphrem.gov.et',
-      institution: 'AAPHREM Surveillance & Research Directorate',
-      avatar: 'H'
-    }
-  ];
-
-  var accountsHtml = accounts.map(function(acc) {
-    return `
-      <div class="google-acc-item" onclick="selectGoogleAccount('${acc.email}', '${acc.name}', '${acc.institution}', '${mode}')" style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;cursor:pointer;background:#fff;transition:all 0.2s ease;">
-        <div style="width:38px;height:38px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;">
-          ${acc.avatar}
-        </div>
-        <div style="flex:1;overflow:hidden;text-align:left;">
-          <div style="font-weight:700;font-size:13.5px;color:#0f172a;">${acc.name}</div>
-          <div style="font-size:12px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${acc.email}</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${acc.institution}</div>
-        </div>
-        <i class="fas fa-chevron-right" style="color:#cbd5e1;font-size:12px;"></i>
-      </div>
-    `;
-  }).join('');
-
-  var modalHtml = `
-    <div id="google-auth-modal" class="modal-overlay active" style="z-index:9999;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;">
-      <div class="modal-card" style="max-width:440px;border-radius:18px;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,0.35);padding:0;background:#ffffff;">
-        <div style="padding:24px 24px 16px;text-align:center;border-bottom:1px solid #f1f5f9;">
-          <svg width="32" height="32" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:10px;">
-            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
-            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-            <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.347 2.825.957 4.039l3.007-2.332z"/>
-            <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
-          </svg>
-          <h3 style="font-family:'Outfit',sans-serif;font-size:18px;font-weight:700;color:#0f172a;margin-bottom:4px;">
-            ${isRegister ? 'Register with Google' : 'Sign in with Google'}
-          </h3>
-          <p style="font-size:12.5px;color:#64748b;margin:0;">Choose an account to continue to <strong>AAPHREML-IRERC</strong></p>
-        </div>
-
-        <div style="padding:18px 24px;max-height:360px;overflow-y:auto;">
-          <div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:0.5px;margin-bottom:10px;text-align:left;">
-            RECOMMENDED INSTITUTIONAL ACCOUNTS
-          </div>
-          ${accountsHtml}
-
-          <div style="margin-top:14px;border-top:1px solid #f1f5f9;padding-top:14px;">
-            <div onclick="toggleCustomGoogleBox()" style="display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#2563eb;cursor:pointer;padding:8px 4px;">
-              <i class="fas fa-user-plus" style="font-size:13px;"></i>
-              <span>Use another Google / Gmail account...</span>
-            </div>
-
-            <div id="custom-google-box" style="display:none;margin-top:12px;background:#f8fafc;padding:14px;border-radius:10px;border:1px solid #e2e8f0;text-align:left;">
-              <div style="margin-bottom:10px;">
-                <label style="font-size:11.5px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Full Name (with Title)</label>
-                <input type="text" id="custom-google-name" class="form-input" placeholder="e.g. Dr. Yohannes Berhanu" style="font-size:12.5px;padding:8px 10px;width:100%;">
-              </div>
-              <div style="margin-bottom:10px;">
-                <label style="font-size:11.5px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Google / Workspace Email</label>
-                <input type="email" id="custom-google-email" class="form-input" placeholder="e.g. yohannes@aau.edu.et or gmail.com" style="font-size:12.5px;padding:8px 10px;width:100%;">
-              </div>
-              <div style="margin-bottom:12px;">
-                <label style="font-size:11.5px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Institution Affiliation</label>
-                <input type="text" id="custom-google-inst" class="form-input" placeholder="e.g. Addis Ababa University" style="font-size:12.5px;padding:8px 10px;width:100%;">
-              </div>
-              <button class="btn btn-primary btn-sm" style="width:100%;" onclick="submitCustomGoogleAccount('${mode}')">
-                <i class="fab fa-google"></i> Continue with this Google Account
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div style="padding:14px 24px 18px;background:#f8fafc;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:11px;color:#94a3b8;">Protected by Google Workspace &amp; AAPHREML Security</span>
-          <button class="btn btn-secondary btn-sm" onclick="closeGoogleModal()">Cancel</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
-}
-
-function closeGoogleModal() {
-  var modal = document.getElementById('google-auth-modal');
-  if (modal) modal.remove();
-}
-
-function toggleCustomGoogleBox() {
-  var el = document.getElementById('custom-google-box');
-  if (el) el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
-}
-
-function selectGoogleAccount(email, name, inst, mode) {
-  closeGoogleModal();
-  showLoader(true);
-
-  var payload = {
-    email: email,
-    full_name: name,
-    institution_name: inst
-  };
-
-  callBackend('apiGoogleAuth', [payload], function(res) {
-    showLoader(false);
-    var user = (res && res.data) ? res.data : res;
-    if (user && user.user_id) {
-      completeSignIn(user);
-      var isReg = mode === 'register';
-      showToast((isReg ? 'Account registered! Welcome, ' : 'Signed in as ') + user.full_name + ' (Investigator)', 'success');
-    } else {
-      showToast('Google authentication failed. Please try again.', 'danger');
-    }
-  }, function(err) {
-    showLoader(false);
-    showToast(err || 'Google registration failed.', 'danger');
-  });
-}
-
-function submitCustomGoogleAccount(mode) {
-  var name = document.getElementById('custom-google-name') ? document.getElementById('custom-google-name').value.trim() : '';
-  var email = document.getElementById('custom-google-email') ? document.getElementById('custom-google-email').value.trim() : '';
-  var inst = document.getElementById('custom-google-inst') ? document.getElementById('custom-google-inst').value.trim() : '';
-
-  if (!email || email.indexOf('@') === -1) {
-    showToast('Please enter a valid Google email address.', 'warning');
-    return;
-  }
-  if (!name) {
-    name = email.split('@')[0].replace(/[._]/g, ' ');
-    name = name.replace(/\b\w/g, function(l){ return l.toUpperCase(); });
-    name = 'Dr. ' + name;
-  }
-  if (!inst) {
-    inst = email.indexOf('@aau') !== -1 ? 'Addis Ababa University' : 'Addis Ababa City Administration Health Bureau';
-  }
-
-  selectGoogleAccount(email, name, inst, mode);
-}
-
-
-/**
  * Mobile Sidebar Drawer Controls
  */
 function closeMobileSidebar() {
@@ -801,698 +649,5 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-/**
- * GOLDEN END-TO-END MOCK PROTOCOL — AAPHREML-IRERC-2026-0100
- * A single protocol that has traversed the COMPLETE lifecycle:
- *   Submitted → Admin Check → Classified → Assigned → Reviewed → Assessed
- *   → Decision (Approved) → Communicated → Data Collection Active →
- *   Progress Reports → Complete → Closeout Submitted → Accepted → Archived
- * Every array is populated so every tab/section in the UI can be exercised.
- */
-function _goldenProtocolDetails_(p) {
-  var pid = p.protocol_id;
-  return {
-    protocol: p,
-    details: {
-      study_objectives: 'To evaluate the combined impact of bundled antenatal SMS reminders, community health worker home visits, and integrated postnatal care on maternal and child health outcomes across three sub-cities of Addis Ababa over 18 months.',
-      study_design: 'Mixed-methods prospective cohort study with a stepped-wedge cluster-randomised implementation component',
-      study_population: 'Pregnant women (≥18 years) residing in Addis Ketema, Bole, and Yekatit 12 catchment areas, followed through 6 months postpartum',
-      study_site: 'Addis Ketema Health Center, Bole Sub-city Clinic, and Yekatit 12 Hospital',
-      sample_size: '450 mother-child pairs (150 per site)',
-      recruitment_method: 'Consecutive enrolment at first antenatal visit; community mobilisation via health extension workers',
-      data_collection_method: 'Structured interviews, maternal health records extraction, and infant anthropometry at 6 months',
-      data_analysis: 'Intention-to-treat analysis with generalised linear mixed models; qualitative thematic analysis of provider interviews'
-    },
-    ethics: {
-      informed_consent_process: 'Written informed consent in Amharic administered by trained nurses at first antenatal contact; separate consent for infant follow-up; right of withdrawal explained verbally and in writing.',
-      vulnerable_populations: 'Pregnant women and postpartum mothers — additional safeguards include no inducement, flexible interview scheduling, and option to decline infant anthropometry without affecting care.',
-      potential_risks: 'Minimal risk — possible discomfort from recall of pregnancy complications; mitigated by trained female interviewers and referral pathway for psychosocial distress.',
-      expected_benefits: 'Direct benefit: enhanced antenatal contact and SMS reminders. Community benefit: evidence for city-wide MCH programme strengthening.'
-    },
-    documents: [
-      // ── 4 INITIAL SUBMISSION DOCUMENTS (uploaded during Protocol Submission) ──
-      { doc_id: 'DOC-100-01', doc_type: 'DOC_INST_SUPPORT', document_title: 'Institutional Supporting Letter', current_version: '1.0', file_name: pid + '_Supporting_Letter.pdf', status: 'Verified', drive_url: '#', uploaded_by: 'Dr. Almaz Tefera', uploaded_at: '2026-01-15T08:00:00Z', stage: 'Submission' },
-      { doc_id: 'DOC-100-02', doc_type: 'DOC_PI_ID', document_title: 'Principal Investigator Identification', current_version: '1.0', file_name: pid + '_PI_ID.jpg', status: 'Verified', drive_url: '#', uploaded_by: 'Dr. Almaz Tefera', uploaded_at: '2026-01-15T08:05:00Z', stage: 'Submission' },
-      { doc_id: 'DOC-100-03', doc_type: 'DOC_PROTOCOL', document_title: 'Complete Proposal Document', current_version: '2.0', file_name: pid + '_Proposal_v2.0.docx', status: 'Verified', drive_url: '#', uploaded_by: 'Dr. Almaz Tefera', uploaded_at: '2026-03-10T09:00:00Z', stage: 'Submission', version_history: [{ version: '1.0', upload_date: '2026-01-15T08:10:00Z', change: 'Initial submission', uploaded_by: 'Dr. Almaz Tefera' }, { version: '2.0', upload_date: '2026-03-10T09:00:00Z', change: 'Revised after amendment AMD-01 (added Yekatit 12 site)', uploaded_by: 'Dr. Almaz Tefera' }] },
-      { doc_id: 'DOC-100-04', doc_type: 'DOC_CV', document_title: 'Principal Investigator Curriculum Vitae', current_version: '1.0', file_name: pid + '_CV.pdf', status: 'Verified', drive_url: '#', uploaded_by: 'Dr. Almaz Tefera', uploaded_at: '2026-01-15T08:15:00Z', stage: 'Submission' },
-      // ── 1 FINAL RESEARCH FINDINGS ARCHIVE (uploaded at Closeout) ──
-      { doc_id: 'DOC-100-05', doc_type: 'DOC_FINDINGS', document_title: 'Research Findings Archive', current_version: '1.0', file_name: pid + '_Research_Findings.zip', status: 'Verified', drive_url: '#', uploaded_by: 'Dr. Almaz Tefera', uploaded_at: '2026-09-15T00:00:00Z', stage: 'Closeout', contents: 'Final research report (PDF), complete dataset (XLSX), analysis scripts, and supporting materials' }
-    ],
-    versions: [
-      { version_id: 'VER-100-01', protocol_id: pid, version_number: '1.0', upload_date: '2026-01-15T08:00:00Z', uploaded_by: 'Dr. Almaz Tefera', change_summary: 'Initial submission', status: 'Superseded' },
-      { version_id: 'VER-100-02', protocol_id: pid, version_number: '2.0', upload_date: '2026-03-10T09:00:00Z', uploaded_by: 'Dr. Almaz Tefera', change_summary: 'Post-amendment revision — revised consent form and added Yekatit 12 as third site', status: 'Current' }
-    ],
-    reviewer_assignments: [
-      { assignment_id: 'ASGN-100-01', protocol_id: pid, reviewer_name: 'Binyam Abebe', reviewer_email: 'rev.binyam@aahb.gov.et', reviewer_id: 'USR-MBR-04', assigned_date: '2026-01-25', deadline_date: '2026-02-01', coi_declared: 'None Declared (Cleared)', coi_date: '2026-01-26', status: 'Completed', review_type: 'Full Board' },
-      { assignment_id: 'ASGN-100-02', protocol_id: pid, reviewer_name: 'Dr. Demamu Reta', reviewer_email: 'rev.demamu@aahb.gov.et', reviewer_id: 'USR-MBR-05', assigned_date: '2026-01-25', deadline_date: '2026-02-01', coi_declared: 'None Declared (Cleared)', coi_date: '2026-01-26', status: 'Completed', review_type: 'Full Board' },
-      { assignment_id: 'ASGN-100-03', protocol_id: pid, reviewer_name: 'Simegnew Asrie', reviewer_email: 'rev.simegnew@aahb.gov.et', reviewer_id: 'USR-MBR-07', assigned_date: '2026-01-25', deadline_date: '2026-02-01', coi_declared: 'Declared (Minor) — Managed', coi_date: '2026-01-27', status: 'Completed', review_type: 'Full Board' }
-    ],
-    assessments: [
-      { assessment_id: 'ASM-100-01', protocol_id: pid, reviewer_id: 'USR-MBR-04', reviewer_name: 'Binyam Abebe', recommendation: 'Recommend Approval', summary_notes: 'Methodologically rigorous stepped-wedge design with adequate statistical power justification. Ethical safeguards for pregnant women are comprehensive. Recommend approval.', required_corrections: '', signature_approval: 'Binyam Abebe (Electronic Signature Verified)', assessment_date: '2026-02-03', overall_score: '18 / 20' },
-      { assessment_id: 'ASM-100-02', protocol_id: pid, reviewer_id: 'USR-MBR-05', reviewer_name: 'Dr. Demamu Reta', recommendation: 'Recommend Approval with Conditions', summary_notes: 'Strong public health significance. Sample size calculation sound. Consent process appropriate. Minor clarification needed on data sharing plan.', required_corrections: 'Add explicit data sharing and deposition plan for the dataset at study conclusion.', signature_approval: 'Dr. Demamu Reta (Electronic Signature Verified)', assessment_date: '2026-02-04', overall_score: '17 / 20' },
-      { assessment_id: 'ASM-100-03', protocol_id: pid, reviewer_id: 'USR-MBR-07', reviewer_name: 'Simegnew Asrie', recommendation: 'Recommend Approval', summary_notes: 'COI managed (recused from budget deliberation). Legal and regulatory compliance confirmed. Consent form compliant with national guidelines.', required_corrections: '', signature_approval: 'Simegnew Asrie (Electronic Signature Verified)', assessment_date: '2026-02-05', overall_score: '19 / 20' }
-    ],
-    assessment_items: [
-      { assessment_id: 'ASM-100-01', code: 'CRIT_01', section: 'Scientific Justification', question: 'Is the research rationale clearly described and scientifically sound?', response: 'Yes', comments: 'Well-justified by local MCH burden data.' },
-      { assessment_id: 'ASM-100-01', code: 'CRIT_07', section: 'Informed Consent', question: 'Is the informed consent procedure comprehensive, voluntary, and culturally respectful?', response: 'Yes', comments: 'Bilingual consent; withdrawal rights clear.' },
-      { assessment_id: 'ASM-100-01', code: 'CRIT_11', section: 'Vulnerable Groups', question: 'Are vulnerable populations adequately safeguarded?', response: 'Yes', comments: 'Pregnant women — no inducement; flexible scheduling.' },
-      { assessment_id: 'ASM-100-02', code: 'CRIT_03', section: 'Sample Size', question: 'Is the sample size calculated with adequate justification?', response: 'Yes', comments: 'Power calculation appropriate for stepped-wedge.' },
-      { assessment_id: 'ASM-100-02', code: 'CRIT_19', section: 'Budget Transparency', question: 'Is the budget itemized and free of coercive inducements?', response: 'Yes', comments: 'Reasonable reimbursement, no coercive payments.' }
-    ],
-    expedited: null,
-    decisions: [
-      { decision_id: 'DEC-100-01', protocol_id: pid, decision_type: 'Approved', decision_date: '2026-02-20', chairperson_name: 'Asmamaw Deguale', quorum_members_count: 7, summary_comments: 'Quorum of 7 members established. Protocol approved unanimously. Scientifically rigorous, ethically sound, and of high public health value to Addis Ababa.', conditions_summary: 'Submit revised data sharing plan prior to commencement of data collection.', communication_date: '2026-02-22', meeting_id: 'MTG-2026-02' }
-    ],
-    conditions: [
-      { condition_id: 'COND-100-01', protocol_id: pid, condition_text: 'Submit a detailed data sharing and dataset deposition plan prior to commencement of data collection.', status: 'Verified', verified_by: 'Alem Nigussie', verified_date: '2026-02-26' }
-    ],
-    amendments: [
-      { amendment_id: 'AMDREC-10001', protocol_id: pid, amendment_number: 'AMD-01', submission_date: '2026-03-05T00:00:00Z', amendment_title: 'Addition of Yekatit 12 Hospital as third study site', amendment_type: 'Minor Amendment', review_path: 'Expedited Review', rationale: 'To reach target sample size within timeframe and improve geographic representativeness.', summary_of_changes: 'Added Yekatit 12 Hospital as a third recruitment site; updated consent form to reference all three sites; revised workplan and budget accordingly.', chair_notified_date: '2026-03-05', status: 'Approved', decision_id: 'DEC-100-01', decision_date: '2026-03-10', submitted_by: 'pi.almaz@sphmmc.edu.et' }
-    ],
-    continuing_reviews: [
-      { cont_review_id: 'CR-100-01', protocol_id: pid, submission_date: '2026-07-01T00:00:00Z', current_study_status: 'Active — Enrolling', target_sample_size: 450, enrolled_participants: 290, progress_summary: 'Study progressing well. Two of three sites fully active; third site activated post-amendment. No serious adverse events. On track for completion by August 2026.', adverse_events_count: 0, adverse_events_summary: 'None reported', protocol_deviations_summary: 'None', status: 'Reviewed — Continue as Approved', next_review_date: '2026-09-01', submitted_by: 'pi.almaz@sphmmc.edu.et' }
-    ],
-    termination: {
-      termination_id: 'TERM-100-01', protocol_id: pid, submission_date: '2026-09-15T00:00:00Z', submitted_by: 'pi.almaz@sphmmc.edu.et',
-      reason_for_termination: 'Study completed per protocol — all objectives achieved',
-      study_completion_status: 'Completed per Protocol',
-      total_participants_enrolled: 450,
-      summary_of_findings: 'Bundled MCH interventions achieved 32% reduction in low birth weight and 41% increase in 4th ANC visit. Findings support city-wide scale-up.',
-      research_findings_doc_id: 'UPLOADED: AAPHREML-IRERC-2026-0100_Research_Findings.zip',
-      decision_id: 'DEC-100-01', archival_date: '2026-09-30T00:00:00Z', status: 'Closed & Archived'
-    },
-    communications: [
-      { comm_type: 'Submission Confirmation', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Protocol ' + pid + ' received', delivery_status: 'Sent via Email', sent_at: '2026-01-15T09:00:00Z' },
-      { comm_type: 'Administrative Check Complete', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Administrative check passed for ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-01-22T10:00:00Z' },
-      { comm_type: 'Reviewer Assignment', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Reviewers assigned to ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-01-25T14:00:00Z' },
-      { comm_type: 'Final Decision', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Final Decision (Approved) for ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-02-22T16:00:00Z' },
-      { comm_type: 'Clearance Letter', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Ethical Clearance Letter — ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-02-22T16:30:00Z' },
-      { comm_type: 'Amendment Approved', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Amendment AMD-01 approved for ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-03-10T11:00:00Z' },
-      { comm_type: 'Progress Report Acknowledged', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: RPT-02 acknowledged for ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-06-14T10:00:00Z' },
-      { comm_type: 'Closeout Accepted', recipient_name: 'Dr. Almaz Tefera', recipient_email: 'pi.almaz@sphmmc.edu.et', subject: 'AAPHREML-IRERC: Study archived — ' + pid, delivery_status: 'Sent via Email', sent_at: '2026-09-30T12:00:00Z' }
-    ],
-    audit_trail: [
-      { action: 'PROTOCOL_SUBMITTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', new_status: 'Submitted', timestamp: '2026-01-15T08:00:00Z', comments: 'Initial protocol package submission (v1.0).' },
-      { action: 'ADMIN_CHECK_PASSED', user_name: 'Alem Nigussie', user_role: 'Secretariat', previous_status: 'Submitted', new_status: 'Submission Complete', timestamp: '2026-01-22T10:00:00Z', comments: 'All required documents verified complete.' },
-      { action: 'REVIEW_TYPE_CLASSIFIED', user_name: 'Alem Nigussie', user_role: 'Secretariat', previous_status: 'Submission Complete', new_status: 'Under Review Type Classification', timestamp: '2026-01-23T09:00:00Z', comments: 'Classified as Full Board Review.' },
-      { action: 'REVIEWERS_ASSIGNED', user_name: 'Alem Nigussie', user_role: 'Secretariat', previous_status: 'Under Review Type Classification', new_status: 'Reviewer Assigned', timestamp: '2026-01-25T14:00:00Z', comments: '3 reviewers assigned: Binyam Abebe, Dr. Demamu Reta, Simegnew Asrie.' },
-      { action: 'COI_DECLARED', user_name: 'Simegnew Asrie', user_role: 'Reviewer', timestamp: '2026-01-27T10:00:00Z', comments: 'Minor COI declared and managed — recused from budget deliberation.' },
-      { action: 'ASSESSMENT_SUBMITTED', user_name: 'Binyam Abebe', user_role: 'Reviewer', previous_status: 'Reviewer Assigned', new_status: 'Under Review', timestamp: '2026-02-03T15:00:00Z', comments: 'Assessment submitted: Recommend Approval (18/20).' },
-      { action: 'ASSESSMENT_SUBMITTED', user_name: 'Dr. Demamu Reta', user_role: 'Reviewer', timestamp: '2026-02-04T11:00:00Z', comments: 'Assessment submitted: Recommend Approval with Conditions (17/20).' },
-      { action: 'ASSESSMENT_SUBMITTED', user_name: 'Simegnew Asrie', user_role: 'Reviewer', timestamp: '2026-02-05T09:00:00Z', comments: 'Assessment submitted: Recommend Approval (19/20).' },
-      { action: 'IRERC_DECISION', user_name: 'Asmamaw Deguale', user_role: 'Chairperson', previous_status: 'Under Study Assessment', new_status: 'Final Decision Approved', timestamp: '2026-02-20T10:00:00Z', comments: 'Approved unanimously. Quorum 7/10. Condition: data sharing plan.' },
-      { action: 'CONDITION_VERIFIED', user_name: 'Alem Nigussie', user_role: 'Secretariat', timestamp: '2026-02-26T10:00:00Z', comments: 'Data sharing plan submitted and verified.' },
-      { action: 'DECISION_COMMUNICATED', user_name: 'Alem Nigussie', user_role: 'Secretariat', previous_status: 'Final Decision Approved', new_status: 'Decision Communicated', timestamp: '2026-02-22T16:00:00Z', comments: 'Final decision and clearance letter dispatched to PI.' },
-      { action: 'AMENDMENT_SUBMITTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', previous_status: 'Decision Communicated', new_status: 'Amendment Pending Review', timestamp: '2026-03-05T00:00:00Z', comments: 'Amendment AMD-01: add Yekatit 12 as third site.' },
-      { action: 'AMENDMENT_APPROVED', user_name: 'Asmamaw Deguale', user_role: 'Chairperson', previous_status: 'Amendment Pending Review', new_status: 'Decision Communicated', timestamp: '2026-03-10T11:00:00Z', comments: 'Amendment approved via expedited review.' },
-      { action: 'DATA_COLLECTION_STARTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', previous_status: 'Decision Communicated', new_status: 'Data Collection Active', timestamp: '2026-03-01T08:00:00Z', comments: 'PI confirmed data collection start at Addis Ketema and Bole sites.' },
-      { action: 'PROGRESS_REPORT_SUBMITTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', timestamp: '2026-04-05T09:00:00Z', comments: 'RPT-01 submitted. 85 enrolled. On Track.' },
-      { action: 'PROGRESS_REPORT_REVIEWED', user_name: 'Alem Nigussie', user_role: 'Secretariat', timestamp: '2026-04-08T10:00:00Z', comments: 'RPT-01 reviewed. No issues.' },
-      { action: 'PROGRESS_REPORT_SUBMITTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', timestamp: '2026-06-10T09:00:00Z', comments: 'RPT-02 submitted. 225 enrolled. 50% milestone.' },
-      { action: 'PROGRESS_REPORT_REVIEWED', user_name: 'Alem Nigussie', user_role: 'Secretariat', timestamp: '2026-06-14T10:00:00Z', comments: 'RPT-02 reviewed. Excellent progress.' },
-      { action: 'PROGRESS_REPORT_SUBMITTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', timestamp: '2026-08-10T09:00:00Z', comments: 'RPT-03 submitted. 390 enrolled. Deviation noted (2 withdrawals + 1 minor AE).' },
-      { action: 'PROGRESS_REPORT_REVIEWED', user_name: 'Asmamaw Deguale', user_role: 'Chairperson', timestamp: '2026-08-14T10:00:00Z', comments: 'RPT-03 reviewed. Deviation within bounds.' },
-      { action: 'DATA_COLLECTION_COMPLETE', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', previous_status: 'Data Collection Active', new_status: 'Data Collection Complete', timestamp: '2026-08-15T17:00:00Z', comments: 'PI declared data collection complete. 450 enrolled.' },
-      { action: 'CLOSEOUT_SUBMITTED', user_name: 'Dr. Almaz Tefera', user_role: 'Investigator', previous_status: 'Data Collection Complete', new_status: 'Closeout Report Submitted', timestamp: '2026-09-15T00:00:00Z', comments: 'Final report + dataset uploaded.' },
-      { action: 'STUDY_ARCHIVED', user_name: 'Asmamaw Deguale', user_role: 'Chairperson', previous_status: 'Closeout Report Submitted', new_status: 'Study Archived', timestamp: '2026-09-30T00:00:00Z', comments: 'Closeout accepted and complete record locked by AACAHB.' }
-    ]
-  };
-}
 
-/**
- * CLEARED PROTOCOL TEMPLATE — for Dr. Dereje Haile's 3 protocols
- * Each has traversed the full pipeline: Submitted → Admin Check → Assigned
- * → Reviewed → Assessed → Approved (Ethical Clearance Granted).
- * All tabs are populated with realistic data specific to each protocol.
- */
-function _clearedProtocolDetails_(p) {
-  var pid = p.protocol_id;
-
-  // Per-protocol specifics
-  var specs = {
-    'AAPHREML-IRERC-2026-0201': {
-      objectives:   'To determine the prevalence of Type 2 Diabetes Mellitus (T2DM) among adults aged 35 and above attending primary health care facilities in Addis Ababa, and to identify associated socio-demographic, behavioural, and clinical risk factors.',
-      design:       'Cross-sectional analytical survey with systematic random sampling across six public health facilities.',
-      population:   'Adults aged 35+ attending outpatient departments in Addis Ababa University Referral Hospital and Addis Ketema Health Center.',
-      site:         'Addis Ababa University Referral Hospital, Addis Ketema Health Center',
-      sample:       '520 adults',
-      method:       'Structured questionnaire, fasting blood glucose measurement, and anthropometric assessment.',
-      analysis:     'Multivariable logistic regression to identify independent predictors of T2DM.',
-      consent:      'Written informed consent in Amharic; blood glucose results shared with participants; referral pathway for newly diagnosed cases.',
-      risks:        'Minimal — mild discomfort from fingerprick blood glucose test; mitigated by trained phlebotomists and referral.',
-      benefits:     'Participants receive free blood glucose testing and clinical referral if needed. Community benefit: city-level T2DM burden data.',
-      vulnerable:   'None (adults with full decision-making capacity only).',
-      reviewer1: 'Dr. Demamu Reta', rev1email: 'rev.demamu@aahb.gov.et', rev1score: '19 / 20',
-      reviewer2: 'Yoseph Kelelaw',  rev2email: 'rev.yoseph@aahb.gov.et',  rev2score: '18 / 20',
-      rec1: 'Recommend Approval', rec1notes: 'Rigorous cross-sectional design. Sample size well-justified. Blood glucose protocol clinically appropriate.',
-      rec2: 'Recommend Approval', rec2notes: 'Referral pathway for new diagnoses is an important safeguard. Recommend approval.',
-      decisionDate: '2026-03-15', approvalDate: '2026-03-15', commDate: '2026-03-16',
-      conditions: 'None',
-      meetingNum: 'IRERC-MTG-2026-03'
-    },
-    'AAPHREML-IRERC-2026-0202': {
-      objectives:   'To evaluate the impact of improved biomass cookstove adoption on indoor PM2.5 concentrations and acute respiratory infection (ARI) incidence in children under five years old in Yeka Sub-city households.',
-      design:       'Quasi-experimental pre-post study with a parallel comparison group across three health centre catchment areas.',
-      population:   'Households with at least one child under five years in Yeka Sub-city, Addis Ababa.',
-      site:         'Yeka Sub-city Health Centers (Yeka Abado, Alem Bank, and Entoto Health Centers)',
-      sample:       '380 mother-child pairs (120 intervention, 120 control, 140 buffer)',
-      method:       'Household air quality monitoring (PM2.5 sensors), structured ARI symptom diary, and health facility ARI consultation records.',
-      analysis:     'Difference-in-differences analysis; paired t-tests for PM2.5 pre/post change; Poisson regression for ARI incidence rate ratio.',
-      consent:      'Written informed consent from household head or mother in Amharic; right of withdrawal without affecting health services.',
-      risks:        'Minimal — passive air quality monitoring sensor placement; no invasive procedures.',
-      benefits:     'Intervention households receive subsidised improved cookstove. Public health evidence for citywide clean cooking programme.',
-      vulnerable:   'Children under five — protected by parental consent, no direct procedures on children.',
-      reviewer1: 'Binyam Abebe',   rev1email: 'rev.binyam@aahb.gov.et',  rev1score: '18 / 20',
-      reviewer2: 'Simegnew Asrie', rev2email: 'rev.simegnew@aahb.gov.et', rev2score: '19 / 20',
-      rec1: 'Recommend Approval', rec1notes: 'Innovative design. PM2.5 monitoring protocol appropriate. Subsidy incentive is non-coercive.',
-      rec2: 'Recommend Approval', rec2notes: 'Consent procedure appropriate for household study. Environmental health benefit is significant.',
-      decisionDate: '2026-04-10', approvalDate: '2026-04-10', commDate: '2026-04-11',
-      conditions: 'None',
-      meetingNum: 'IRERC-MTG-2026-04'
-    },
-    'AAPHREML-IRERC-2026-0203': {
-      objectives:   'To assess the feasibility and yield of a community-based hypertension screening programme and to evaluate linkage-to-care rates at primary health facilities in Kirkos and Nifas Silk Lafto sub-cities.',
-      design:       'Prospective implementation study with community health worker-led door-to-door screening and facility-based follow-up.',
-      population:   'Adults aged 30+ residing in Kirkos and Nifas Silk Lafto sub-cities.',
-      site:         'Kirkos Health Center, Nifas Silk Lafto Primary Hospital',
-      sample:       '600 adults screened; 150 hypertensive cases followed for 3-month linkage-to-care',
-      method:       'Validated digital blood pressure monitors; structured community screening form; facility attendance records for linkage-to-care assessment.',
-      analysis:     'Descriptive epidemiology for screening yield; multivariable Cox regression for time-to-care linkage predictors.',
-      consent:      'Community health workers explain voluntary participation in Amharic before screening; written consent for facility follow-up component.',
-      risks:        'Minimal — non-invasive blood pressure measurement; psychological benefit of knowing BP status outweighs risk.',
-      benefits:     'Free blood pressure screening and clinical referral for hypertensives. Generates city-level data for NCD prevention planning.',
-      vulnerable:   'None (adults with full decision-making capacity).',
-      reviewer1: 'Dr. Demamu Reta', rev1email: 'rev.demamu@aahb.gov.et', rev1score: '17 / 20',
-      reviewer2: 'Binyam Abebe',    rev2email: 'rev.binyam@aahb.gov.et', rev2score: '18 / 20',
-      rec1: 'Recommend Approval', rec1notes: 'Implementation study design appropriate to feasibility question. Linkage-to-care endpoint is policy-relevant.',
-      rec2: 'Recommend Approval with Conditions', rec2notes: 'Approve, but require clear SOP for referral pathway and hypertensive crisis protocol.',
-      decisionDate: '2026-05-05', approvalDate: '2026-05-05', commDate: '2026-05-06',
-      conditions: 'Submit a Standard Operating Procedure for hypertensive crisis management and referral pathway prior to commencement of screening.',
-      meetingNum: 'IRERC-MTG-2026-05'
-    }
-  };
-
-  var s = specs[pid] || specs['AAPHREML-IRERC-2026-0201'];
-  var sub = (p.submission_date || '2026-02-10T08:00:00Z').substring(0, 10);
-  var adminDate = new Date(new Date(p.submission_date || '2026-02-10').getTime() + 7*86400000).toISOString();
-  var assignDate = new Date(new Date(p.submission_date || '2026-02-10').getTime() + 12*86400000).toISOString().substring(0,10);
-  var deadline   = new Date(new Date(p.submission_date || '2026-02-10').getTime() + 19*86400000).toISOString().substring(0,10);
-  var asm1Date   = new Date(new Date(p.submission_date || '2026-02-10').getTime() + 21*86400000).toISOString().substring(0,10);
-  var asm2Date   = new Date(new Date(p.submission_date || '2026-02-10').getTime() + 22*86400000).toISOString().substring(0,10);
-
-  return {
-    protocol: p,
-    details: {
-      study_objectives: s.objectives,
-      study_design: s.design,
-      study_population: s.population,
-      study_site: s.site,
-      sample_size: s.sample,
-      recruitment_method: 'Systematic random sampling at health facility outpatient triage.',
-      data_collection_method: s.method,
-      data_analysis: s.analysis
-    },
-    ethics: {
-      informed_consent_process: s.consent,
-      vulnerable_populations: s.vulnerable,
-      potential_risks: s.risks,
-      expected_benefits: s.benefits
-    },
-    documents: [
-      { doc_id: pid+'-D01', doc_type: 'DOC_INST_SUPPORT', document_title: 'Institutional Supporting Letter', current_version: '1.0', file_name: pid+'_Supporting_Letter.pdf', status: 'Verified', drive_url: '#', uploaded_by: p.pi_name, uploaded_at: p.submission_date, stage: 'Submission' },
-      { doc_id: pid+'-D02', doc_type: 'DOC_PI_ID',        document_title: 'Principal Investigator Identification', current_version: '1.0', file_name: pid+'_PI_ID.jpg', status: 'Verified', drive_url: '#', uploaded_by: p.pi_name, uploaded_at: p.submission_date, stage: 'Submission' },
-      { doc_id: pid+'-D03', doc_type: 'DOC_PROTOCOL',     document_title: 'Complete Proposal Document', current_version: '1.0', file_name: pid+'_Proposal_v1.0.docx', status: 'Verified', drive_url: '#', uploaded_by: p.pi_name, uploaded_at: p.submission_date, stage: 'Submission', version_history: [{ version: '1.0', upload_date: p.submission_date, change: 'Initial submission', uploaded_by: p.pi_name }] },
-      { doc_id: pid+'-D04', doc_type: 'DOC_CV',           document_title: 'Principal Investigator Curriculum Vitae', current_version: '1.0', file_name: pid+'_CV.pdf', status: 'Verified', drive_url: '#', uploaded_by: p.pi_name, uploaded_at: p.submission_date, stage: 'Submission' }
-    ],
-    versions: [
-      { version_id: 'VER-'+pid+'-01', protocol_id: pid, version_number: '1.0', upload_date: p.submission_date, uploaded_by: p.pi_name, change_summary: 'Initial submission', status: 'Current' }
-    ],
-    reviewer_assignments: [
-      { assignment_id: 'ASGN-'+pid+'-01', protocol_id: pid, reviewer_name: s.reviewer1, reviewer_email: s.rev1email, assigned_date: assignDate, deadline_date: deadline, coi_declared: 'None Declared (Cleared)', status: 'Completed', review_type: 'Full Board' },
-      { assignment_id: 'ASGN-'+pid+'-02', protocol_id: pid, reviewer_name: s.reviewer2, reviewer_email: s.rev2email, assigned_date: assignDate, deadline_date: deadline, coi_declared: 'None Declared (Cleared)', status: 'Completed', review_type: 'Full Board' }
-    ],
-    assessments: [
-      { assessment_id: 'ASM-'+pid+'-01', protocol_id: pid, reviewer_name: s.reviewer1, recommendation: s.rec1, summary_notes: s.rec1notes, required_corrections: '', signature_approval: s.reviewer1 + ' (Electronic Signature Verified)', assessment_date: asm1Date, overall_score: s.rev1score },
-      { assessment_id: 'ASM-'+pid+'-02', protocol_id: pid, reviewer_name: s.reviewer2, recommendation: s.rec2, summary_notes: s.rec2notes, required_corrections: s.conditions !== 'None' ? s.conditions : '', signature_approval: s.reviewer2 + ' (Electronic Signature Verified)', assessment_date: asm2Date, overall_score: s.rev2score }
-    ],
-    assessment_items: [
-      { assessment_id: 'ASM-'+pid+'-01', code: 'CRIT_01', section: 'Scientific Justification', question: 'Is the research rationale clearly described and scientifically sound?', response: 'Yes', comments: 'Well-evidenced rationale from local epidemiological data.' },
-      { assessment_id: 'ASM-'+pid+'-01', code: 'CRIT_07', section: 'Informed Consent', question: 'Is the informed consent procedure comprehensive, voluntary, and culturally respectful?', response: 'Yes', comments: 'Amharic consent with withdrawal rights clearly stated.' },
-      { assessment_id: 'ASM-'+pid+'-02', code: 'CRIT_09', section: 'Risk Minimization', question: 'Are physical, psychological, social, and legal risks identified and minimized?', response: 'Yes', comments: 'Minimal risk design with appropriate safeguards.' },
-      { assessment_id: 'ASM-'+pid+'-02', code: 'CRIT_20', section: 'Regulatory Compliance', question: 'Does the study adhere to national Ethiopian health research guidelines?', response: 'Yes', comments: 'Compliant with FMOH guidelines and Declaration of Helsinki.' }
-    ],
-    expedited: null,
-    decisions: [
-      { decision_id: 'DEC-'+pid+'-01', protocol_id: pid, decision_type: 'Approved', decision_date: s.decisionDate, chairperson_name: 'Asmamaw Deguale', quorum_members_count: 6, summary_comments: 'Quorum of 6 members established. Protocol approved. Scientifically sound and ethically compliant.', conditions_summary: s.conditions, communication_date: s.commDate, meeting_id: s.meetingNum }
-    ],
-    conditions: s.conditions !== 'None' ? [
-      { condition_id: 'COND-'+pid+'-01', protocol_id: pid, condition_text: s.conditions, status: 'Verified', verified_by: 'Alem Nigussie', verified_date: s.commDate }
-    ] : [],
-    amendments: [],
-    continuing_reviews: [],
-    termination: null,
-    communications: [
-      { comm_type: 'Submission Confirmation', recipient_name: p.pi_name, recipient_email: p.pi_email, subject: 'AAPHREML-IRERC: Protocol '+pid+' received', delivery_status: 'Sent via Email', sent_at: p.submission_date },
-      { comm_type: 'Administrative Check Complete', recipient_name: p.pi_name, recipient_email: p.pi_email, subject: 'AAPHREML-IRERC: Administrative check passed for '+pid, delivery_status: 'Sent via Email', sent_at: adminDate },
-      { comm_type: 'Reviewer Assignment', recipient_name: p.pi_name, recipient_email: p.pi_email, subject: 'AAPHREML-IRERC: Reviewers assigned to '+pid, delivery_status: 'Sent via Email', sent_at: assignDate+'T14:00:00Z' },
-      { comm_type: 'Final Decision — Approved', recipient_name: p.pi_name, recipient_email: p.pi_email, subject: 'AAPHREML-IRERC: Ethical Clearance Granted for '+pid, delivery_status: 'Sent via Email', sent_at: s.commDate+'T16:00:00Z' }
-    ],
-    audit_trail: [
-      { action: 'PROTOCOL_SUBMITTED',   user_name: p.pi_name,        user_role: 'Investigator', new_status: 'Submitted',             timestamp: p.submission_date,              comments: 'Initial protocol package submitted via 8-step wizard.' },
-      { action: 'ADMIN_CHECK_PASSED',   user_name: 'Alem Nigussie',  user_role: 'Secretariat',  previous_status: 'Submitted', new_status: 'Submission Complete', timestamp: adminDate, comments: 'All 4 required documents verified complete.' },
-      { action: 'REVIEWERS_ASSIGNED',   user_name: 'Alem Nigussie',  user_role: 'Secretariat',  previous_status: 'Submission Complete', new_status: 'Reviewer Assigned', timestamp: assignDate+'T14:00:00Z', comments: '2 reviewers assigned: '+s.reviewer1+', '+s.reviewer2+'.' },
-      { action: 'ASSESSMENT_SUBMITTED', user_name: s.reviewer1,      user_role: 'Reviewer',     timestamp: asm1Date+'T10:00:00Z', comments: 'Assessment submitted: '+s.rec1+' ('+s.rev1score+').' },
-      { action: 'ASSESSMENT_SUBMITTED', user_name: s.reviewer2,      user_role: 'Reviewer',     timestamp: asm2Date+'T11:00:00Z', comments: 'Assessment submitted: '+s.rec2+' ('+s.rev2score+').' },
-      { action: 'IRERC_DECISION',       user_name: 'Asmamaw Deguale',user_role: 'Chairperson',  previous_status: 'Under Study Assessment', new_status: 'Approved', timestamp: s.decisionDate+'T10:00:00Z', comments: 'Approved. Quorum 6/10. '+( s.conditions !== 'None' ? 'Condition: '+s.conditions : 'No conditions.') },
-      { action: 'DECISION_COMMUNICATED',user_name: 'Alem Nigussie',  user_role: 'Secretariat',  previous_status: 'Approved', new_status: 'Decision Communicated', timestamp: s.commDate+'T16:00:00Z', comments: 'Ethical Clearance Letter dispatched to '+p.pi_name+'.' }
-    ]
-  };
-}
-
-/**
- * Rich offline mock responder for local browser preview & standalone testing
- */
-function getMockResponse_(funcName, args) {
-  var sampleProtocols = [
-    { protocol_id: 'IRERC-2026-0001', study_title: '[DEMO DATA] Evaluation of Real-Time PCR vs Rapid Diagnostic Tests for Cholera Outbreak Surveillance in Addis Ketema Sub-City', pi_name: 'Dr. Hiwot Girma', pi_email: 'pi.hiwot@aaphrem.gov.et', institution_name: 'AAPHREM', study_category: 'Biomedical & Laboratory', review_type: 'Full Board Review', current_status: 'Submitted', submission_date: '2026-09-01T08:00:00Z' },
-    { protocol_id: 'IRERC-2026-0002', study_title: '[DEMO DATA] Efficacy of Community-Led WASH Interventions on Childhood Diarrheal Incidence in Informal Settlements of Kolfe Keranyo', pi_name: 'Dr. Dereje Haile', pi_email: 'pi.dereje@aau.edu.et', institution_name: 'Addis Ababa University', study_category: 'Public Health & Health Systems', review_type: 'Full Board Review', current_status: 'Under Administrative Check', submission_date: '2026-09-03T09:30:00Z' },
-    { protocol_id: 'IRERC-2026-0003', study_title: '[DEMO DATA] Molecular Characterization of Multidrug-Resistant Mycobacterium tuberculosis Isolates in Referral Hospitals of Addis Ababa', pi_name: 'Dr. Berhanu Assefa', pi_email: 'pi.berhanu@ephi.gov.et', institution_name: 'EPHI', study_category: 'Biomedical & Laboratory', review_type: 'Full Board Review', current_status: 'Approved', approval_date: '2026-08-01T10:00:00Z', expiry_date: '2027-08-01', submission_date: '2026-07-10T11:00:00Z' },
-    { protocol_id: 'IRERC-2026-0004', study_title: '[DEMO DATA] Retrospective Clinical Audit of Perinatal Mortality Audit Records Across 10 Public Hospitals (2023-2025)', pi_name: 'Dr. Meron Abebe', pi_email: 'pi.meron@yekatit12.edu.et', institution_name: 'Yekatit 12 Hospital', study_category: 'Observational / Epidemiological', review_type: 'Expedited Review', current_status: 'Approved', approval_date: '2026-08-22T14:00:00Z', expiry_date: '2027-08-22', submission_date: '2026-08-15T09:00:00Z' },
-    { protocol_id: 'IRERC-2026-0005', study_title: '[DEMO DATA] Cross-Sectional Survey of Antimicrobial Stewardship Practices Among Healthcare Providers in Addis Ababa Private Health Facilities', pi_name: 'Dr. Tigist Mengistu', pi_email: 'pi.tigist@ahri.gov.et', institution_name: 'AHRI', study_category: 'Health Systems & Policy', review_type: 'Full Board Review', current_status: 'Reviewer Assigned', submission_date: '2026-09-12T10:15:00Z' },
-    { protocol_id: 'IRERC-2026-0006', study_title: '[DEMO DATA] Randomized Controlled Trial of Mobile Health (mHealth) SMS Reminders for Antenatal Care Adherence in Gulele Woredas', pi_name: 'Dr. Almaz Tefera', pi_email: 'pi.almaz@sphmmc.edu.et', institution_name: 'St. Paul Hospital MMC', study_category: 'Clinical Trial / Interventional', review_type: 'Full Board Review', current_status: 'Under Review', submission_date: '2026-09-08T13:45:00Z' },
-    { protocol_id: 'IRERC-2026-0007', study_title: '[DEMO DATA] Assessment of Indoor Particulate Matter (PM2.5) Exposure and Respiratory Symptoms in Bakeries and Commercial Kitchens of Lideta', pi_name: 'Dr. Dereje Haile', pi_email: 'pi.dereje@aau.edu.et', institution_name: 'Addis Ababa University', study_category: 'Environmental & Occupational Health', review_type: 'Full Board Review', current_status: 'Incomplete / Correction Required', submission_date: '2026-09-15T15:20:00Z' },
-    { protocol_id: 'IRERC-2026-0008', study_title: '[DEMO DATA] Prospective Cohort Study on Second-Line Antiretroviral Therapy Treatment Failure Biomarkers at Zewditu Memorial Hospital', pi_name: 'Dr. Tewodros Kassahun', pi_email: 'pi.tewodros@zewditu.gov.et', institution_name: 'Zewditu Memorial Hospital', study_category: 'Clinical Trial / Interventional', review_type: 'Full Board Review', current_status: 'Under Study Assessment', submission_date: '2026-08-20T08:30:00Z' },
-    { protocol_id: 'IRERC-2026-0009', study_title: '[DEMO DATA] Prevalence of Occult Hepatitis B Infection Among Blood Donors at National Blood Bank Service', pi_name: 'Dr. Berhanu Assefa', pi_email: 'pi.berhanu@ephi.gov.et', institution_name: 'EPHI', study_category: 'Biomedical & Laboratory', review_type: 'Full Board Review', current_status: 'Approved with Conditions', approval_date: '2026-08-25T11:00:00Z', expiry_date: '2027-08-25', submission_date: '2026-08-05T10:00:00Z' },
-    { protocol_id: 'IRERC-2026-0010', study_title: '[DEMO DATA] Investigating Cervical Cancer Screening Uptake Barriers Among Female Factory Workers in Bole Lemi Industrial Park', pi_name: 'Dr. Almaz Tefera', pi_email: 'pi.almaz@sphmmc.edu.et', institution_name: 'St. Paul Hospital MMC', study_category: 'Socio-behavioral & Qualitative', review_type: 'Full Board Review', current_status: 'Modifications Required', submission_date: '2026-08-18T14:30:00Z' },
-    { protocol_id: 'IRERC-2026-0011', study_title: '[DEMO DATA] Genetic Diversity of Plasmodium vivax Isolates in Migrant Construction Workers in Akaki Kality', pi_name: 'Dr. Tigist Mengistu', pi_email: 'pi.tigist@ahri.gov.et', institution_name: 'AHRI', study_category: 'Biomedical & Laboratory', review_type: 'Full Board Review', current_status: 'Not Approved', submission_date: '2026-07-22T16:00:00Z' },
-    { protocol_id: 'IRERC-2026-0012', study_title: '[DEMO DATA] Feasibility of Point-of-Care Ultrasound for Emergency Triage in Low-Resource Health Centers of Nifas Silk Lafto', pi_name: 'Dr. Getachew Kassa', pi_email: 'pi.getachew@tash.edu.et', institution_name: 'Tikur Anbessa Hospital', study_category: 'Health Systems & Policy', review_type: 'Full Board Review', current_status: 'Submission Complete', submission_date: '2026-09-20T11:15:00Z' },
-    // ── GOLDEN END-TO-END PROTOCOL — traversed the entire lifecycle, all sections populated ──
-    { protocol_id: 'AAPHREML-IRERC-2026-0100', study_title: '[DEMO DATA] Comprehensive Evaluation of Integrated Maternal-Child Health Interventions Across Three Sub-Cities of Addis Ababa', pi_name: 'Dr. Almaz Tefera', pi_email: 'pi.almaz@sphmmc.edu.et', pi_id: 'USR-PI-05', institution_name: 'St. Paul Hospital Millennium Medical College', study_category: 'Public Health & Health Systems', review_type: 'Full Board Review', current_status: 'Study Archived', application_type: 'Initial Review Application', submission_date: '2026-01-15T08:00:00Z', approval_date: '2026-02-20T10:00:00Z', expiry_date: '2027-02-20', data_collection_start_date: '2026-03-01', data_collection_end_date: '2026-08-15', archival_date: '2026-09-30T00:00:00Z', is_archived: true, study_site: 'Addis Ketema Health Center, Bole Sub-city Clinic, and Yekatit 12 Hospital', sample_size: '450', current_version: '2.0', last_report_date: '2026-08-10T09:00:00Z' },
-
-    // ── DR. DEREJE HAILE — 3 Fully Cleared Protocols (all passed to Ethical Clearance Granted) ──
-    { protocol_id: 'AAPHREML-IRERC-2026-0201', study_title: '[DEMO DATA] Prevalence and Risk Factors of Type 2 Diabetes Mellitus Among Adults in Addis Ababa City Administration Health Facilities', pi_name: 'Dr. Dereje Haile', pi_email: 'pi.dereje@aau.edu.et', pi_id: 'USR-PI-01', institution_name: 'Addis Ababa University', study_category: 'Observational / Epidemiological', review_type: 'Full Board Review', current_status: 'Approved', application_type: 'Initial Review Application', submission_date: '2026-02-10T08:00:00Z', approval_date: '2026-03-15T10:00:00Z', expiry_date: '2027-03-15', study_site: 'Addis Ababa University Referral Hospital, Addis Ketema Health Center', sample_size: '520', current_version: '1.0' },
-    { protocol_id: 'AAPHREML-IRERC-2026-0202', study_title: '[DEMO DATA] Impact of Indoor Air Quality Interventions on Acute Respiratory Infection Incidence in Under-Five Children in Yeka Sub-City', pi_name: 'Dr. Dereje Haile', pi_email: 'pi.dereje@aau.edu.et', pi_id: 'USR-PI-01', institution_name: 'Addis Ababa University', study_category: 'Environmental & Occupational Health', review_type: 'Full Board Review', current_status: 'Approved', application_type: 'Initial Review Application', submission_date: '2026-03-05T09:00:00Z', approval_date: '2026-04-10T10:00:00Z', expiry_date: '2027-04-10', study_site: 'Yeka Sub-city Health Centers (3 facilities)', sample_size: '380', current_version: '1.0' },
-    { protocol_id: 'AAPHREML-IRERC-2026-0203', study_title: '[DEMO DATA] Community-Based Hypertension Screening and Linkage to Care in Kirkos and Nifas Silk Lafto Sub-Cities', pi_name: 'Dr. Dereje Haile', pi_email: 'pi.dereje@aau.edu.et', pi_id: 'USR-PI-01', institution_name: 'Addis Ababa University', study_category: 'Public Health & Health Systems', review_type: 'Full Board Review', current_status: 'Approved', application_type: 'Initial Review Application', submission_date: '2026-04-01T08:00:00Z', approval_date: '2026-05-05T10:00:00Z', expiry_date: '2027-05-05', study_site: 'Kirkos Health Center, Nifas Silk Lafto Primary Hospital', sample_size: '600', current_version: '1.0' }
-  ];
-
-  switch(funcName) {
-    case 'apiGetSessionUser':
-      return AppState.currentUser;
-    case 'apiLoginUser':
-      var email = (args && args[0]) ? String(args[0]).toLowerCase() : '';
-      var usersByEmail = {
-        'chair.daniel@aahb.gov.et': { user_id: 'USR-MBR-01', full_name: 'Asmamaw Deguale', email: 'chair.daniel@aahb.gov.et', role: 'Chairperson', is_active: true },
-        'vchair.selamawit@aahb.gov.et': { user_id: 'USR-MBR-02', full_name: 'Dr. Selamawit Bekele', email: 'vchair.selamawit@aahb.gov.et', role: 'Vice Chairperson', is_active: true },
-        'sec.solomon@aahb.gov.et': { user_id: 'USR-MBR-03', full_name: 'Alem Nigussie', email: 'sec.solomon@aahb.gov.et', role: 'IRERC Secretary / Administrative Officer', is_active: true },
-        'rev.binyam@aahb.gov.et': { user_id: 'USR-MBR-04', full_name: 'Binyam Abebe', email: 'rev.binyam@aahb.gov.et', role: 'IRERC Member / Reviewer', is_active: true },
-        'pi.dereje@aau.edu.et': { user_id: 'USR-PI-01', full_name: 'Dr. Dereje Haile', email: 'pi.dereje@aau.edu.et', role: 'Investigator', is_active: true },
-        'admin@aahb.gov.et': { user_id: 'USR-ADMIN-01', full_name: 'Bureau IT Administrator', email: 'admin@aahb.gov.et', role: 'System Administrator', is_active: true }
-      };
-      if (usersByEmail[email]) return usersByEmail[email];
-      return {
-        user_id: 'USR-' + Math.floor(Math.random()*9000+1000),
-        full_name: email.split('@')[0].replace('.', ' ').toUpperCase(),
-        email: email,
-        role: email.indexOf('rev') !== -1 ? 'IRERC Member / Reviewer' :
-              email.indexOf('sec') !== -1 ? 'IRERC Secretary / Administrative Officer' :
-              email.indexOf('chair') !== -1 ? 'Chairperson' :
-              email.indexOf('admin') !== -1 ? 'System Administrator' : 'Investigator',
-        is_active: true
-      };
-    case 'apiLogoutUser':
-      return { success: true };
-    case 'apiRegisterInvestigator':
-      var invData = (args && args[0]) ? args[0] : {};
-      return {
-        success: true,
-        user_id: 'USR-INV-' + Math.floor(Math.random()*9000+1000),
-        investigator_id: 'INV-' + Math.floor(Math.random()*9000+1000),
-        full_name: invData.full_name || 'Investigator',
-        email: invData.email,
-        institution_name: invData.institution_name,
-        role: 'Investigator'
-      };
-    case 'apiSaveCommitteeMember':
-      var mData = (args && args[0]) ? args[0] : {};
-      return {
-        success: true,
-        member_id: 'MBR-' + Math.floor(Math.random()*9000+1000),
-        full_name: mData.full_name,
-        email: mData.email,
-        committee_role: mData.committee_role || 'IRERC Member / Reviewer'
-      };
-    case 'apiGetDashboardMetrics':
-      return {
-        stats: {
-          total_submitted: 20, new_submissions: 2, under_admin_review: 3, in_initial_review: 4,
-          under_expedited_review: 4, under_full_board_review: 12, awaiting_investigator_correction: 2,
-          awaiting_irerc_decision: 3, approved: 6, approved_with_conditions: 2, modifications_required: 2,
-          rejected_not_approved: 1, terminated: 2, continuing_review_due: 3, amendments_pending: 2, overdue_reviews: 1
-        },
-        charts: {
-          by_status: { 'Submitted': 2, 'Under Review': 4, 'Approved': 6, 'Assessment': 3, 'Approved w/ Cond': 2, 'Modifications': 2, 'Not Approved': 1 },
-          by_category: { 'Biomedical': 5, 'Public Health': 6, 'Clinical Trial': 4, 'Environmental': 2, 'Socio-behavioral': 3 },
-          reviewer_workload: [
-            { full_name: '[DEMO DATA] Binyam Abebe', professional_category: 'Clinical Expert', active_assignments_count: 2 },
-            { full_name: '[DEMO DATA] Dr. Demamu Reta', professional_category: 'Public Health Expert', active_assignments_count: 1 },
-            { full_name: '[DEMO DATA] Yoseph Kelelaw', professional_category: 'Laboratory Scientist', active_assignments_count: 3 },
-            { full_name: '[DEMO DATA] Simegnew Asrie', professional_category: 'Ethics/Legal Expert', active_assignments_count: 2 }
-          ],
-          avg_processing_days: 16
-        }
-      };
-    case 'apiGetAllProtocols':
-      return sampleProtocols;
-    case 'apiGetProtocolDetails':
-      var pid = args && args[0] ? args[0] : 'IRERC-2026-0001';
-      var match = sampleProtocols.find(function(p){ return p.protocol_id === pid; }) || sampleProtocols[0];
-      if (pid === 'AAPHREML-IRERC-2026-0100') {
-        return _goldenProtocolDetails_(match);
-      }
-      if (pid === 'AAPHREML-IRERC-2026-0201' || pid === 'AAPHREML-IRERC-2026-0202' || pid === 'AAPHREML-IRERC-2026-0203') {
-        return _clearedProtocolDetails_(match);
-      }
-      return {
-        protocol: match,
-        details: {
-          study_objectives: '[DEMO DATA] Evaluate diagnostic sensitivity, specificity, and operational turnaround time under field epidemic conditions.',
-          study_design: 'Prospective Multi-facility Observational Study',
-          study_population: 'Patients presenting with acute watery diarrhea in Addis Ketema',
-          study_site: 'Addis Ketema Health Center and ALERT Hospital',
-          sample_size: '350 suspected cholera cases',
-          recruitment_method: 'Consecutive sampling at health facility triage'
-        },
-        ethics: {
-          informed_consent_process: '[DEMO DATA] Written informed consent administered in Amharic with full participant debriefing.',
-          vulnerable_populations: 'Pediatric participants included with parental written consent and minor assent.',
-          potential_risks: 'Mild discomfort during rectal swab collection.',
-          expected_benefits: 'Prompt clinical diagnosis and notification for targeted water treatment.'
-        },
-        documents: [
-          { doc_id: 'DOC-01', doc_type: 'DOC_PROTOCOL', document_title: 'Research Proposal Document', current_version: '1.0', file_name: pid + '_Research_Proposal.docx', status: 'Verified', drive_url: '#', uploaded_by: 'Investigator (' + match.pi_name + ')', uploaded_at: match.submission_date },
-          { doc_id: 'DOC-02', doc_type: 'DOC_INST_SUPPORT', document_title: 'Institutional Supporting Letter', current_version: '1.0', file_name: pid + '_Supporting_Letter.pdf', status: 'Verified', drive_url: '#', uploaded_by: 'Investigator (' + match.pi_name + ')', uploaded_at: match.submission_date },
-          { doc_id: 'DOC-03', doc_type: 'DOC_PI_ID', document_title: 'Principal Investigator (PI) Identification Card', current_version: '1.0', file_name: pid + '_PI_ID.jpg', status: 'Verified', drive_url: '#', uploaded_by: 'Investigator (' + match.pi_name + ')', uploaded_at: match.submission_date },
-          { doc_id: 'DOC-04', doc_type: 'DOC_CV', document_title: 'Principal Investigator Curriculum Vitae (CV)', current_version: '1.0', file_name: pid + '_CV.pdf', status: 'Verified', drive_url: '#', uploaded_by: 'Investigator (' + match.pi_name + ')', uploaded_at: match.submission_date }
-        ],
-        reviewer_assignments: [
-          { assignment_id: 'ASGN-01', reviewer_name: '[DEMO DATA] Binyam Abebe', reviewer_email: 'rev.binyam@aahb.gov.et', assigned_date: '2026-09-02', deadline_date: '2026-09-11', coi_declared: 'None Declared (Cleared)', status: 'In Progress' }
-        ],
-        assessments: [
-          { assessment_id: 'ASM-01', reviewer_id: 'MBR-04', recommendation: 'Recommend Approval with Conditions', summary_notes: 'Scientifically rigorous proposal. Direct clinical benefit demonstrated.', required_corrections: 'Clarify pediatric assent age threshold.', signature_approval: 'Binyam Abebe (Electronic Signature Verified)', assessment_date: '2026-09-05' }
-        ],
-        decisions: [
-          { decision_id: 'DEC-01', decision_type: 'Approved with Conditions', decision_date: '2026-09-10', chairperson_name: '[DEMO DATA] Asmamaw Deguale', quorum_members_count: 6, summary_comments: 'Quorum established. Protocol approved subject to minor clarification of pediatric assent form.', conditions_summary: 'Submit revised pediatric assent form v1.1 prior to field initiation.' }
-        ],
-        amendments: [],
-        continuing_reviews: [],
-        termination: null,
-        communications: [
-          { comm_type: 'Preliminary Decision', recipient_name: match.pi_name, recipient_email: match.pi_email, subject: 'AAPHREML-IRERC: Preliminary Decision for ' + match.protocol_id, delivery_status: 'Sent via Email', sent_at: '2026-09-10T16:00:00Z' }
-        ],
-        audit_trail: [
-          { action: 'PROTOCOL_SUBMITTED', user_name: match.pi_name, user_role: 'Investigator', new_status: 'Submitted', timestamp: match.submission_date, comments: 'Initial protocol package submission.' },
-          { action: 'ADMIN_CHECK_PASSED', user_name: 'Alem Nigussie', user_role: 'Secretariat', previous_status: 'Submitted', new_status: 'Under Administrative Check', timestamp: '2026-09-02T10:00:00Z', comments: 'All required documents verified.' }
-        ]
-      };
-    case 'apiGetCommitteeMembers':
-      return [
-        { full_name: '[DEMO DATA] Asmamaw Deguale', professional_category: 'Clinical Expert', institution: 'Tikur Anbessa Hospital', position: 'Associate Professor of Internal Medicine', email: 'chair.daniel@aahb.gov.et', telephone: '+251 91 100 0001', committee_role: 'Chairperson', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Dr. Selamawit Bekele', professional_category: 'Public Health Expert', institution: 'AAU School of Public Health', position: 'Senior Epidemiologist', email: 'vchair.selamawit@aahb.gov.et', telephone: '+251 91 100 0002', committee_role: 'Vice Chairperson', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Alem Nigussie', professional_category: 'Ethics/Legal Expert', institution: 'Addis Ababa City Administration Health Bureau', position: 'IRERC Secretary & Bioethicist', email: 'sec.solomon@aahb.gov.et', telephone: '+251 91 100 0003', committee_role: 'IRERC Secretary / Administrative Officer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Binyam Abebe', professional_category: 'Clinical Expert', institution: 'Tikur Anbessa Hospital', position: 'Clinical Researcher', email: 'rev.binyam@aahb.gov.et', telephone: '+251 91 100 0004', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Dr. Demamu Reta', professional_category: 'Public Health Expert', institution: 'AAU School of Public Health', position: 'Epidemiologist', email: 'rev.demamu@aahb.gov.et', telephone: '+251 91 100 0005', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Yoseph Kelelaw', professional_category: 'Laboratory Scientist', institution: 'EPHI', position: 'Senior Laboratory Researcher', email: 'rev.yoseph@aahb.gov.et', telephone: '+251 91 100 0006', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Simegnew Asrie', professional_category: 'Ethics/Legal Expert', institution: 'Addis Ababa City Administration Health Bureau', position: 'Bioethics & Legal Counsel', email: 'rev.simegnew@aahb.gov.et', telephone: '+251 91 100 0007', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Ato Abinet Kebede', professional_category: 'Public Health Expert', institution: 'St. Paul Hospital', position: 'Health Systems Specialist', email: 'rev.abinet@aahb.gov.et', telephone: '+251 91 100 0008', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] W/ro Aster Hailu', professional_category: 'Community Representative', institution: 'Addis Ababa Women Association', position: 'Community Health Liaison & Advocate', email: 'rev.aster@aahb.gov.et', telephone: '+251 91 100 0009', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true },
-        { full_name: '[DEMO DATA] Dr. Mulatu Tesfaye', professional_category: 'Clinical Expert', institution: 'ALERT Hospital', position: 'Consultant Infectious Disease Specialist', email: 'rev.mulatu@aahb.gov.et', telephone: '+251 91 100 0010', committee_role: 'IRERC Member / Reviewer', coi_status: 'Cleared', is_active: true }
-      ];
-    case 'apiGetInvestigators':
-      var curEmail = (AppState.currentUser && AppState.currentUser.email) ? AppState.currentUser.email.toLowerCase() : '';
-      var allInvestigators = [
-        { investigator_id: 'INV-001', full_name: 'Dr. Dereje Haile', email: 'pi.dereje@aau.edu.et', institution_name: 'Addis Ababa University', department: 'School of Public Health', telephone: '+251 91 200 0001', education_level: 'PhD Degree', registered_date: '2026-01-10T08:00:00Z', is_active: true, protocol_count: 3, protocols: [
-          { protocol_id: 'AAPHREML-IRERC-2026-0201', study_title: '[DEMO DATA] Prevalence and Risk Factors of Type 2 Diabetes Mellitus Among Adults in Addis Ababa City Administration Health Facilities', current_status: 'Approved', submission_date: '2026-02-10T08:00:00Z' },
-          { protocol_id: 'AAPHREML-IRERC-2026-0202', study_title: '[DEMO DATA] Impact of Indoor Air Quality Interventions on Acute Respiratory Infection Incidence in Under-Five Children in Yeka Sub-City', current_status: 'Approved', submission_date: '2026-03-05T09:00:00Z' },
-          { protocol_id: 'AAPHREML-IRERC-2026-0203', study_title: '[DEMO DATA] Community-Based Hypertension Screening and Linkage to Care in Kirkos and Nifas Silk Lafto Sub-Cities', current_status: 'Approved', submission_date: '2026-04-01T08:00:00Z' }
-        ] },
-        { investigator_id: 'INV-002', full_name: 'Dr. Almaz Tefera', email: 'pi.almaz@sphmmc.edu.et', institution_name: 'St. Paul Hospital Millennium Medical College', department: 'Department of Obstetrics & Gynecology', telephone: '+251 91 200 0002', education_level: 'PhD Degree', registered_date: '2025-12-15T08:00:00Z', is_active: true, protocol_count: 2, protocols: [ { protocol_id: 'AAPHREML-IRERC-2026-0100', study_title: '[DEMO DATA] Comprehensive Evaluation of Integrated Maternal-Child Health Interventions Across Three Sub-Cities of Addis Ababa', current_status: 'Study Archived', submission_date: '2026-01-15T08:00:00Z' }, { protocol_id: 'IRERC-2026-0006', study_title: '[DEMO DATA] Randomized Controlled Trial of Mobile Health (mHealth) SMS Reminders for Antenatal Care Adherence in Gulele Woredas', current_status: 'Under Review', submission_date: '2026-09-08T13:45:00Z' } ] },
-        { investigator_id: 'INV-003', full_name: 'Dr. Hiwot Girma', email: 'pi.hiwot@aaphrem.gov.et', institution_name: 'AAPHREM', department: 'Research & Surveillance Division', telephone: '+251 91 200 0003', education_level: 'Masters Degree', registered_date: '2026-02-20T08:00:00Z', is_active: true, protocol_count: 1, protocols: [ { protocol_id: 'IRERC-2026-0001', study_title: '[DEMO DATA] Evaluation of Real-Time PCR vs Rapid Diagnostic Tests for Cholera Outbreak Surveillance in Addis Ketema Sub-City', current_status: 'Submitted', submission_date: '2026-09-01T08:00:00Z' } ] }
-      ];
-      if (AppState.currentUser && AppState.currentUser.role === 'Investigator') {
-        return allInvestigators.filter(function(inv){ return inv.email.toLowerCase() === curEmail; });
-      }
-      return allInvestigators;
-    case 'apiGetAllMeetings':
-    case 'getAllMeetings':
-      return [
-        {
-          meeting_id: 'MTG-2026-09',
-          meeting_number: 'IRERC-MTG-2026-09',
-          meeting_date: '2026-10-15',
-          meeting_time: '10:00 AM',
-          venue: 'Bureau Conference Room & Video Link',
-          chairperson_name: '[DEMO DATA] Asmamaw Deguale',
-          status: 'Scheduled',
-          agenda_summary: 'Full Board Review of 4 Protocols and 2 Study Amendments',
-          protocols_count: 4,
-          quorum_status: '8 / 10 Confirmed'
-        },
-        {
-          meeting_id: 'MTG-2026-08',
-          meeting_number: 'IRERC-MTG-2026-08',
-          meeting_date: '2026-08-25',
-          meeting_time: '09:30 AM',
-          venue: 'Bureau Conference Hall B',
-          chairperson_name: '[DEMO DATA] Asmamaw Deguale',
-          status: 'Concluded',
-          agenda_summary: 'Deliberation on 5 initial research protocols and 1 renewal',
-          protocols_count: 5,
-          quorum_status: '7 / 10 Present'
-        },
-        {
-          meeting_id: 'MTG-2026-07',
-          meeting_number: 'IRERC-MTG-2026-07',
-          meeting_date: '2026-07-28',
-          meeting_time: '10:00 AM',
-          venue: 'Bureau Conference Hall A',
-          chairperson_name: '[DEMO DATA] Dr. Selamawit Bekele',
-          status: 'Concluded',
-          agenda_summary: 'Deliberation on 4 initial research protocols',
-          protocols_count: 4,
-          quorum_status: '6 / 10 Present'
-        }
-      ];
-    case 'apiGetNextProtocolCode':
-    case 'generateNextProtocolCode':
-    case 'apiGenerateNextProtocolCode':
-      return { code: 'AAPHREML-IRERC-2026-0021' };
-    case 'processUploadedFile':
-    case 'apiProcessUploadedFile':
-      var fileName = (args && args[0]) ? args[0] : 'Research_Proposal.docx';
-      if (!/\.(docx|doc)$/i.test(fileName)) {
-        return {
-          success: false,
-          fileName: fileName,
-          error: 'The Complete Proposal Document must strictly be a Microsoft Word document (.docx or .doc). Other formats cannot be processed by the structural section scanner.',
-          message: 'Invalid file format: Strictly Microsoft Word (.docx or .doc) document required.'
-        };
-      }
-      var sections = [
-        '1. Title', '2. Abstract', '3. Background', '4. Problem Statement', '5. General Objective',
-        '6. Specific Objectives', '7. Literature Review', '8. Study Area', '9. Study Period',
-        '10. Study Design', '11. Source Population', '12. Study Population', '13. Inclusion Criteria',
-        '14. Exclusion Criteria', '15. Sample Size Determination', '16. Sampling Technique',
-        '17. Variables', '18. Operational Definitions', '19. Data Collection Tools',
-        '20. Data Collection Procedure', '21. Data Quality Assurance', '22. Data Processing and Analysis',
-        '23. Ethical Consideration', '24. Dissemination Plan', '25. Work Plan / Time Schedule',
-        '26. Budget', '27. References', '28. Annex / Appendix'
-      ];
-      var chk = {};
-      sections.forEach(function(s) { chk[s] = 'Yes'; });
-      return {
-        success: true,
-        fileName: fileName,
-        storedName: Date.now() + '_' + fileName,
-        message: 'Processed in 1.4s (All 28 sections verified)',
-        checklistData: chk,
-        missingCount: 0,
-        missingSections: 'None',
-        completenessPercentage: '100.0',
-        totalSections: 28,
-        presentSections: 28
-      };
-    case 'deleteFileFromDrive':
-    case 'apiDeleteFileFromDrive':
-      return true;
-    case 'isSubmissionEditable':
-    case 'apiIsSubmissionEditable':
-      return { editable: true, reason: null };
-    case 'loadForEdit':
-    case 'apiLoadForEdit':
-      return {
-        ok: true,
-        data: {
-          'Protocol Code': (args && args[0]) ? args[0] : 'AAPHREML-IRERC-2026-0001',
-          'College': 'Addis Ababa University School of public health',
-          'Department': 'General Public Health',
-          'Activity Type': 'Survey/Study',
-          'Education Level': 'Masters Degree',
-          'Advisor Name': 'Prof. Tesfaye Kassa',
-          'Advisor Email': 'advisor.tesfaye@aau.edu.et',
-          'Advisor Phone': '+251 91 123 4567',
-          'PI Name': 'Dr. Dereje Haile',
-          'PI Phone': '+251 91 987 6543',
-          'PI Email': (args && args[1]) ? args[1] : 'pi.dereje@aau.edu.et',
-          'Study Title': 'Evaluation of Real-Time PCR vs Rapid Diagnostic Tests for Cholera Outbreak Surveillance in Addis Ketema Sub-City',
-          'Health Focus': 'Communicable diseases',
-          'Data Start Date': '2026-10-15',
-          'Data End Date': '2027-04-15',
-          'Frequency': 'Weekly',
-          'Research Methods': 'Mixed',
-          'Sample Size': '350',
-          'Study Design': 'Cross-sectional study',
-          'General Objective': 'To determine diagnostic accuracy and turnaround time of rapid antigen detection.',
-          'Specific Objectives': '1. Assess sensitivity.\n2. Quantify cost per test.\n3. Evaluate field utility.',
-          'Geographic Coverage': 'Zone | Sub City',
-          'Specific Site': 'Addis Ketema Health Centers',
-          'Gender': 'Both',
-          'Target Group': 'Persons, individuals, and patients',
-          'Electronic Collection': 'Yes',
-          'Data Tools': 'Electronic data collection',
-          'GPS Collected': 'Yes',
-          'Data Format': 'Microsoft Excel files (.xls or .xlsx), SPSS (.sav)',
-          'Data Accessibility': 'Open access',
-          'Funding Source': 'Public/Government',
-          'Budget (ETB)': '150000',
-          'Acknowledged': 'Yes'
-        }
-      };
-    case 'processFormSubmission':
-    case 'apiProcessFormSubmission':
-      var formReq = (args && args[0]) ? args[0] : {};
-      var code = (formReq.form && formReq.form.code) ? formReq.form.code : 'AAPHREML-IRERC-2026-0021';
-      return {
-        result: 'success',
-        message: 'Protocol ' + code + ' saved successfully.',
-        code: code
-      };
-    case 'assignReviewer':
-      return 'Reviewer assigned. Deadline: 2026-10-14';
-    case 'submitReview':
-      return 'Review submitted.';
-    case 'ethicsApprove':
-      return 'Approval recorded (2/2). Quorum reached.';
-    case 'chairDecide':
-      return 'Approved, clearance letter signed and protocol archived.';
-    case 'getDashboardData':
-      var dView = (args && args[0]) ? args[0] : 'Researcher';
-      return sampleProtocols.map(function(p) {
-        return {
-          id: p.protocol_id,
-          title: p.study_title,
-          piName: p.pi_name,
-          status: p.current_status === 'Approved' ? 'S8 - Approved' :
-                  p.current_status === 'Reviewer Assigned' ? 'S5 - Assigned' :
-                  p.current_status === 'Under Review' ? 'S6 - Reviewed' : 'S1 - Submitted',
-          deadline: '2026-10-14',
-          review: 'Committee comments verified.',
-          approvals: p.current_status === 'Approved' ? 2 : 1,
-          quorum: 2,
-          done: true,
-          letter: p.current_status === 'Approved' ? 'https://docs.google.com/document/d/sample' : ''
-        };
-      });
-
-    case 'apiGoogleAuth':
-      var gData = (args && args[0]) ? args[0] : {};
-      var gEmail = gData.email || 'pi.dereje@aau.edu.et';
-      var gName = gData.full_name || 'Dr. Dereje Haile';
-      var gInst = gData.institution_name || (gEmail.indexOf('@aau') !== -1 ? 'Addis Ababa University' : 'Addis Ababa City Administration Health Bureau');
-      return {
-        success: true,
-        data: {
-          user_id: 'USR-PI-' + Math.floor(Math.random() * 9000 + 1000),
-          full_name: gName,
-          email: gEmail,
-          role: 'Investigator',
-          institution: gInst
-        },
-        message: 'Google authentication successful.'
-      };
-
-    case 'apiStartDataCollection':
-      return { success: true, data: { protocolId: args[0], startDate: args[1] || new Date().toISOString().substring(0,10) }, message: 'Data collection commenced.' };
-
-    case 'apiSubmitProgressReport':
-      var pr = args && args[0] ? args[0] : {};
-      return { success: true, data: { report_id: 'DCR-DEMO-' + Date.now(), report_number: 'RPT-01', protocol_id: pr.protocol_id || 'DEMO', aacahb_review_status: 'Pending Review' }, message: 'RPT-01 submitted successfully.' };
-
-    case 'apiReviewProgressReport':
-      return { success: true, data: { reportId: args[0], reviewStatus: args[1] }, message: 'Report marked as ' + (args[1] || 'Reviewed') + '.' };
-
-    case 'apiDeclareDataCollectionComplete':
-      return { success: true, data: { protocolId: args[0] }, message: 'Data collection marked complete.' };
-
-    case 'apiSubmitStudyCloseout':
-      return { success: true, data: { closeout_id: 'CLO-DEMO-001', protocol_id: args && args[0] ? args[0].protocol_id : 'DEMO', aacahb_acceptance_status: 'Pending Review' }, message: 'Closeout submitted successfully.' };
-
-    case 'apiAcceptStudyCloseout':
-      return { success: true, data: { closeoutId: args[0], protocolId: 'DEMO' }, message: 'Study archived.' };
-
-    case 'apiResumeDataCollection':
-      return { success: true, data: { protocolId: args[0] }, message: 'Data collection resumed.' };
-
-    case 'apiGetProtocolProgressReports':
-      var pid = args && args[0] ? args[0] : '';
-      if (pid === 'AAPHREML-IRERC-2026-0100') {
-        return { success: true, data: {
-          reports: [
-            { report_id: 'DCR-100-01', protocol_id: pid, report_number: 'RPT-01', report_type: 'Initial Report', report_date: '2026-04-05T09:00:00Z', reporting_period_start: '2026-03-01', reporting_period_end: '2026-03-31', sites_visited: 'Addis Ketema Health Center, Bole Sub-city Clinic', sites_not_yet_visited: 'Yekatit 12 Hospital', participants_enrolled_this_period: 85, participants_enrolled_total: 85, participants_target: 450, data_collection_status: 'On Track', protocol_deviations: 'None', adverse_events_count: 0, adverse_events_description: 'None', challenges_noted: 'Initial community mobilisation took longer than planned at Bole.', aacahb_review_status: 'Reviewed', aacahb_comments: 'Good start. Ensure Yekatit 12 site is activated next month.', reviewed_by: 'Alem Nigussie', reviewed_at: '2026-04-08T10:00:00Z' },
-            { report_id: 'DCR-100-02', protocol_id: pid, report_number: 'RPT-02', report_type: 'Progress Report', report_date: '2026-06-10T09:00:00Z', reporting_period_start: '2026-04-01', reporting_period_end: '2026-05-31', sites_visited: 'Addis Ketema Health Center, Bole Sub-city Clinic, Yekatit 12 Hospital', sites_not_yet_visited: 'None', participants_enrolled_this_period: 140, participants_enrolled_total: 225, participants_target: 450, data_collection_status: 'On Track', protocol_deviations: 'None', adverse_events_count: 0, adverse_events_description: 'None', challenges_noted: 'All three sites now active. Recruitment pace on target.', aacahb_review_status: 'Reviewed', aacahb_comments: 'Excellent progress. 50% enrolment milestone reached. Continue as approved.', reviewed_by: 'Alem Nigussie', reviewed_at: '2026-06-14T10:00:00Z' },
-            { report_id: 'DCR-100-03', protocol_id: pid, report_number: 'RPT-03', report_type: 'Progress Report', report_date: '2026-08-10T09:00:00Z', reporting_period_start: '2026-06-01', reporting_period_end: '2026-07-31', sites_visited: 'Addis Ketema Health Center, Bole Sub-city Clinic, Yekatit 12 Hospital', sites_not_yet_visited: 'None', participants_enrolled_this_period: 165, participants_enrolled_total: 390, participants_target: 450, data_collection_status: 'Deviation Noted', protocol_deviations: 'Two participants withdrew consent at Yekatit 12; replaced per protocol contingency. PI notified Secretariat same day.', adverse_events_count: 1, adverse_events_description: 'One minor adverse event (transient dizziness post-questionnaire) — resolved without intervention.', challenges_noted: 'Withdrawals handled per protocol. Replacement enrolment proceeding.', aacahb_review_status: 'Reviewed', aacahb_comments: 'Deviation acknowledged and within acceptable bounds. Adverse event appropriately managed. No action required.', reviewed_by: 'Asmamaw Deguale', reviewed_at: '2026-08-14T10:00:00Z' }
-          ],
-          closeout: { closeout_id: 'CLO-100-01', protocol_id: pid, submission_date: '2026-09-15T00:00:00Z', submitted_by: 'pi.almaz@sphmmc.edu.et', actual_start_date: '2026-03-01', actual_end_date: '2026-08-15', total_participants_enrolled: 450, study_completion_status: 'Completed per Protocol', summary_of_findings: 'Integrated MCH interventions across three sub-cities achieved a 32% reduction in low birth weight and a 41% increase in fourth antenatal visit attendance. The bundled approach proved feasible and acceptable to both providers and mothers. Findings support city-wide scale-up pending resource allocation.', deviation_from_protocol: 'Minor: two consent withdrawals at Yekatit 12, replaced per protocol. One transient adverse event resolved without intervention.', final_report_doc_id: 'UPLOADED: AAPHREML-IRERC-2026-0100_Research_Findings.zip', dataset_doc_id: '', research_findings_doc_id: 'UPLOADED: AAPHREML-IRERC-2026-0100_Research_Findings.zip', ethical_compliance_statement: 'I declare this research was conducted strictly in accordance with the approved protocol, the granted ethical clearance, and the ethical standards of AAPHREML-IRERC.', aacahb_acceptance_status: 'Accepted', accepted_by: 'Asmamaw Deguale', acceptance_date: '2026-09-30T00:00:00Z', archival_date: '2026-09-30T00:00:00Z' }
-        }};
-      }
-      return { success: true, data: {
-        reports: [
-          { report_id: 'DCR-DEMO-01', protocol_id: pid, report_number: 'RPT-01', report_type: 'Progress Report', report_date: '2026-09-15T09:00:00Z', reporting_period_start: '2026-09-01', reporting_period_end: '2026-09-14', sites_visited: 'Addis Ketema Health Center', sites_not_yet_visited: 'ALERT Hospital', participants_enrolled_this_period: 12, participants_enrolled_total: 12, participants_target: 350, data_collection_status: 'On Track', protocol_deviations: 'None', adverse_events_count: 0, adverse_events_description: 'None', challenges_noted: 'Minor scheduling delays at Site 1.', aacahb_review_status: 'Reviewed', aacahb_comments: 'Progress noted. Continue as per protocol.', reviewed_by: 'Alem Nigussie', reviewed_at: '2026-09-17T10:00:00Z' }
-        ],
-        closeout: null
-      }};
-
-    case 'apiGetMonitoringDashboard':
-      return { success: true, data: {
-        summary: { active_count: 3, suspended_count: 1, complete_count: 2, closeout_pending_count: 1, archived_count: 4, expired_count: 0, overdue_count: 1, expiring_soon_count: 1, pending_review_count: 2 },
-        active_studies: sampleProtocols.slice(0,3).map(function(p){ return Object.assign({}, p, { current_status: 'Data Collection Active', data_collection_start_date: '2026-09-01', last_report_date: '2026-09-15T09:00:00Z', expiry_date: '2027-03-01' }); }),
-        overdue_studies: [Object.assign({}, sampleProtocols[0], { current_status: 'Data Collection Active', last_report_date: '2026-07-20T09:00:00Z', days_overdue: 75 })],
-        suspended_studies: [Object.assign({}, sampleProtocols[1], { current_status: 'Data Collection Suspended' })],
-        expiring_soon: [Object.assign({}, sampleProtocols[2], { expiry_date: '2026-10-20', current_status: 'Data Collection Active' })],
-        expired_studies: [],
-        closeout_pending: [Object.assign({}, sampleProtocols[3], { current_status: 'Closeout Report Submitted' })],
-        pending_reviews: [{ report_id: 'DCR-DEMO-01', protocol_id: sampleProtocols[0].protocol_id, report_number: 'RPT-01', report_date: '2026-09-15T09:00:00Z', data_collection_status: 'On Track', participants_enrolled_total: 12, aacahb_review_status: 'Pending Review' }],
-        recent_reports: [{ report_id: 'DCR-DEMO-01', protocol_id: sampleProtocols[0].protocol_id, report_number: 'RPT-01', report_date: '2026-09-15T09:00:00Z', data_collection_status: 'On Track', participants_enrolled_total: 12, aacahb_review_status: 'Reviewed' }],
-        archived_studies: (function(){
-          var golden = sampleProtocols.filter(function(p){ return p.protocol_id === 'AAPHREML-IRERC-2026-0100'; });
-          var others = sampleProtocols.slice(4,6).map(function(p){ return Object.assign({}, p, { current_status: 'Study Archived', archival_date: '2026-08-01T00:00:00Z' }); });
-          return golden.concat(others);
-        })()
-      }};
-
-    case 'apiClassifyReviewType':
-      return { success: true, data: { protocolId: args[0], reviewType: args[1] }, message: 'Protocol classified for ' + (args[1]||'review') + '.' };
-    case 'apiCheckOverdueProgressReports':
-      return { success: true, data: { flaggedCount: 1, flagged: [{ protocol_id: sampleProtocols[0].protocol_id, pi_name: sampleProtocols[0].pi_name, days_overdue: 75 }] }, message: '1 protocol flagged as overdue for progress report.' };
-
-    case 'apiUploadProtocolDocument':
-      var upPayload = args && args[0] ? args[0] : {};
-      return { success: true, data: { doc_id: upPayload.doc_id, new_version: upPayload.new_version, file_name: upPayload.file_name }, message: 'Document revision uploaded and queued for Secretariat verification.' };
-
-    case 'apiCheckExpiredClearances':
-      return { success: true, data: { expiredCount: 0, expired: [] }, message: 'No expired clearances found.' };
-
-    default:
-      return { success: true, message: 'Simulated operation ' + funcName };
-  }
-}
 </script>

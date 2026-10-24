@@ -14,10 +14,10 @@ var CFG = {
   TIMEZONE: 'Africa/Addis_Ababa',
 
   // Set these to institution-owned resources before initializing or deploying.
-  DB_SS_ID: '',
+  DB_SS_ID: '1STOWsef_1jO9wyA1SDjl27fwCNZso7t_2Txqctr96sw',
   ROOT_FOLDER_NAME: 'AAPHREML-IRERC_Documents',
-  SHEET_ID: '',
-  FOLDER_ID: '',
+  SHEET_ID: '1VAOLsmapTnKXtVnONO_O-ZH4H7_KsvQ2VZjTpfH6_dM',
+  FOLDER_ID: '1lx0-ws8XFPUzMmc4s31UKfHUyYNfdoch',
   SHEET_TAB_NAME: 'Initial Protocol',
   ETHICS_QUORUM: 2,
 

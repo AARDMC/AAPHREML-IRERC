@@ -11,6 +11,8 @@ on:
       - 'client/**'
       - 'server/**'
       - 'styles/**'
+      - 'scripts/**'
+      - 'Logo File.png'
       - 'appsscript.json'
       - '.claspignore'
       - '.clasp.json'
@@ -18,13 +20,15 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: aaphreml-irerc-production
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  deploy-backend-and-build-site:
     environment: irerc-production
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +41,7 @@ jobs:
       - name: Install clasp
         run: npm install --global @google/clasp
 
-      - name: Push and update the web app deployment
+      - name: Build and deploy the single-file Apps Script backend
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
           SCRIPT_ID: ${{ vars.IRERC_SCRIPT_ID }}
@@ -50,8 +54,31 @@ jobs:
 
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
-          node -e 'const fs = require("fs"); const file = ".clasp.json"; const config = JSON.parse(fs.readFileSync(file, "utf8")); config.scriptId = process.env.SCRIPT_ID; fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");'
+          node scripts/build-gas.js
+          node -e 'const fs=require("node:fs"); fs.writeFileSync(".gas-build/.clasp.json", JSON.stringify({scriptId:process.env.SCRIPT_ID,rootDir:"."},null,2)+"\n");'
+          (cd .gas-build && clasp show-file-status && clasp push --force && clasp update-deployment "$DEPLOYMENT_ID" --description "GitHub commit $GITHUB_SHA")
 
-          clasp show-file-status
-          clasp push --force
-          clasp update-deployment "$DEPLOYMENT_ID" --description "GitHub commit $GITHUB_SHA"
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build GitHub Pages frontend
+        env:
+          IRERC_DEPLOYMENT_ID: ${{ vars.IRERC_DEPLOYMENT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/build-pages.js
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .pages-site
+
+  deploy-pages:
+    needs: deploy-backend-and-build-site
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy GitHub Pages site
+        id: deployment
+        uses: actions/deploy-pages@v4
