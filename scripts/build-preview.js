@@ -21,6 +21,7 @@ replacements.forEach(function(pair) {
 });
 if (html.indexOf('<!-- IRERC_PAGES_CONFIG -->') === -1) throw new Error('Missing Pages configuration marker.');
 html = html.replace('<!-- IRERC_PAGES_CONFIG -->', '');
+html = html.replace(/[ \\t]+$/gm, '');
 if (html.indexOf('<?!') !== -1) throw new Error('Unresolved template marker in preview output.');
 fs.writeFileSync(path.join(root, 'preview.html'), '\uFEFF' + html, 'utf8');
 console.log('Built preview.html.');
