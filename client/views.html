@@ -323,7 +323,7 @@ function renderReviewerWorkload_(list) {
   if (!list.length) return '<p style="color:var(--text-muted);font-size:12px;">No reviewer data.</p>';
   var max = Math.max.apply(null, list.map(function(r){ return r.active_assignments_count; }));
   return list.map(function(r) {
-    var name = (r.full_name || '').replace('[DEMO DATA] ','');
+    var name = (r.full_name || '');
     var pct = max > 0 ? Math.round((r.active_assignments_count/max)*100) : 0;
     return `<div style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;margin-bottom:4px;">
@@ -422,7 +422,7 @@ function getInvestigatorStageIndex_(status) {
 }
 
 function renderInvestigatorProgressCard_(p) {
-  var cleanTitle = (p.study_title || '').replace('[DEMO DATA] ','');
+  var cleanTitle = (p.study_title || '');
   var s = getStatusInfo(p.current_status);
   var stageIdx = getInvestigatorStageIndex_(p.current_status);
   var isCorrectionNeeded = p.current_status.indexOf('Correction') !== -1 || p.current_status.indexOf('Modifications') !== -1;
@@ -645,8 +645,8 @@ function renderProtocolRows_(list) {
   }
 
   return list.map(function(p) {
-    var cleanTitle = (p.study_title || '').replace('[DEMO DATA] ', '');
-    var cleanPi    = (p.pi_name    || '').replace('[DEMO DATA] ', '');
+    var cleanTitle = (p.study_title || '');
+    var cleanPi    = (p.pi_name    || '');
     var s = getStatusInfo(p.current_status);
 
     return `
@@ -799,8 +799,8 @@ function renderAssignmentsView() {
               </thead>
               <tbody>
                 ${assignable.map(function(p) {
-                  var cleanTitle = (p.study_title||'').replace('[DEMO DATA]','').trim();
-                  var cleanPi    = (p.pi_name||'').replace('[DEMO DATA]','').trim();
+                  var cleanTitle = (p.study_title||'').trim();
+                  var cleanPi    = (p.pi_name||'').trim();
                   return `
                     <tr>
                       <td><span class="protocol-code" onclick="navigateTo('protocol-detail','${p.protocol_id}')" style="cursor:pointer;">${p.protocol_id}</span></td>
@@ -928,8 +928,8 @@ function renderMyReviewsView() {
 }
 
 function renderReviewerProtocolCard_(p) {
-  var cleanTitle = (p.study_title||'').replace('[DEMO DATA]','').trim();
-  var cleanPi    = (p.pi_name||'').replace('[DEMO DATA]','').trim();
+  var cleanTitle = (p.study_title||'').trim();
+  var cleanPi    = (p.pi_name||'').trim();
   var s = getStatusInfo(p.current_status);
 
   return `
@@ -2383,8 +2383,8 @@ function renderProtocolDetailView(protocolId) {
     var comms       = res.communications || [];
     var logs        = res.audit_trail    || [];
 
-    var cleanTitle = (p.study_title||'').replace('[DEMO DATA] ','');
-    var cleanPi    = (p.pi_name   ||'').replace('[DEMO DATA] ','');
+    var cleanTitle = (p.study_title||'');
+    var cleanPi    = (p.pi_name   ||'');
     var s          = getStatusInfo(p.current_status);
 
     var role          = AppState.currentUser.role;
@@ -2454,10 +2454,10 @@ function renderProtocolDetailView(protocolId) {
           <div style="display:grid;grid-template-columns:2.5fr 1fr;gap:24px;">
             <div>
               <h4 style="font-family:'Outfit',sans-serif;color:var(--primary);font-size:15px;font-weight:700;margin-bottom:12px;">Study Synopsis</h4>
-              <p style="margin-bottom:14px;font-size:13.5px;"><strong>Objectives:</strong> ${(details.study_objectives||'Evaluate clinical performance.').replace('[DEMO DATA] ','')}</p>
+              <p style="margin-bottom:14px;font-size:13.5px;"><strong>Objectives:</strong> ${(details.study_objectives||'Not provided')}</p>
               <p style="margin-bottom:14px;font-size:13.5px;"><strong>Study Design:</strong> ${details.study_design||'Observational prospective cohort'} at ${details.study_site||'Addis Ababa health facilities'}</p>
               <h4 style="font-family:'Outfit',sans-serif;color:var(--primary);font-size:15px;font-weight:700;margin-top:20px;margin-bottom:12px;">Human Subject Safeguards</h4>
-              <p style="margin-bottom:10px;font-size:13px;"><strong>Consent Procedure:</strong> ${(ethics.informed_consent_process||'Written informed consent in Amharic with participant rights debriefing.').replace('[DEMO DATA] ','')}</p>
+              <p style="margin-bottom:10px;font-size:13px;"><strong>Consent Procedure:</strong> ${(ethics.informed_consent_process||'Not provided')}</p>
               <p style="margin-bottom:10px;font-size:13px;"><strong>Risk Mitigation:</strong> ${ethics.potential_risks||'Minimal clinical risks with strict participant confidentiality.'}</p>
               <p style="margin-bottom:10px;font-size:13px;"><strong>Anticipated Benefits:</strong> ${ethics.expected_benefits||'Direct diagnostic and surveillance benefit to the regional health bureau.'}</p>
             </div>
@@ -2572,7 +2572,7 @@ function renderProtocolDetailView(protocolId) {
                 ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">No reviewers assigned yet.</td></tr>'
                 : assignments.map(function(a){
                   return `<tr>
-                    <td><strong>${a.reviewer_name.replace('[DEMO DATA] ','')}</strong></td>
+                    <td><strong>${a.reviewer_name}</strong></td>
                     <td style="font-size:12px;color:var(--text-muted);">${a.reviewer_email}</td>
                     <td style="font-size:12px;font-family:'JetBrains Mono',monospace;">${(a.assigned_date||'').substring(0,10)}</td>
                     <td style="font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--primary-light);font-weight:600;">${(a.deadline_date||'').substring(0,10)}</td>
@@ -2635,7 +2635,7 @@ function renderProtocolDetailView(protocolId) {
                   </h5>
                   <span style="font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text-muted);">${(dec.decision_date||'').substring(0,10)}</span>
                 </div>
-                <p style="font-size:13px;margin-top:6px;"><strong>Presiding Chairperson:</strong> ${dec.chairperson_name.replace('[DEMO DATA] ','')} &bull; <strong>Quorum Verified:</strong> ${dec.quorum_members_count} members</p>
+                <p style="font-size:13px;margin-top:6px;"><strong>Presiding Chairperson:</strong> ${dec.chairperson_name} &bull; <strong>Quorum Verified:</strong> ${dec.quorum_members_count} members</p>
                 <p style="font-size:13px;margin-top:6px;color:var(--text-main);"><strong>Committee Deliberation:</strong> ${dec.summary_comments||'Protocol conforms to national and international ethical guidelines.'}</p>
                 ${dec.conditions_summary ? `<div style="margin-top:10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);padding:10px 14px;border-radius:6px;font-size:12.5px;color:#b45309;"><strong>Stipulated Conditions for Investigator:</strong> ${dec.conditions_summary}</div>` : ''}
                 <div style="margin-top:14px;display:flex;gap:10px;">
@@ -2895,9 +2895,9 @@ function renderCommitteeView() {
                   <td>
                     <div style="display:flex;align-items:center;gap:8px;">
                       <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#0f2744,#2563eb);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">
-                        ${(m.full_name.replace('[DEMO DATA] ','').split(' ').slice(-1)[0]||'M')[0]}
+                        ${(m.full_name.split(' ').slice(-1)[0]||'M')[0]}
                       </div>
-                      <strong>${m.full_name.replace('[DEMO DATA] ','')}</strong>
+                      <strong>${m.full_name}</strong>
                     </div>
                   </td>
                   <td><span class="badge badge-submitted">${m.professional_category}</span></td>
@@ -2924,127 +2924,39 @@ function renderCommitteeView() {
 // ============================================================================
 function renderMeetingsView() {
   var container = document.getElementById('content-container');
-  var role = AppState.currentUser ? AppState.currentUser.role : '';
-  var isReviewer = role === 'IRERC Member / Reviewer';
-  var canSchedule = role === 'System Administrator' || role === 'IRERC Secretary / Administrative Officer' || role === 'Chairperson' || role === 'Vice Chairperson';
+  container.innerHTML = '<div class="card"><div class="card-header"><div class="card-title"><i class="fas fa-users"></i> IRERC Meetings</div></div><div class="card-body" style="text-align:center;padding:36px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Loading meetings…</div></div>';
 
-  var actionBtn = '';
-  if (canSchedule) {
-    actionBtn = `
-      <button class="btn btn-primary btn-sm" onclick="showToast('Scheduling new IRERC Ordinary Session...','info')">
-        <i class="fas fa-calendar-plus"></i> Schedule Meeting
-      </button>
-    `;
-  } else if (isReviewer) {
-    actionBtn = `
-      <button class="btn btn-success btn-sm" onclick="showToast('Your attendance has been confirmed for the October 15 session. Quorum updated: 9/10.','success')">
-        <i class="fas fa-check-circle"></i> Confirm Quorum Attendance
-      </button>
-    `;
-  }
+  callBackend('apiGetAllMeetings', [], function(meetings) {
+    var items = Array.isArray(meetings) ? meetings : [];
+    var escapeValue = function(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(character) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character];
+      });
+    };
 
-  var html = `
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title"><i class="fas fa-users"></i> IRERC Full Board Review Sessions &amp; Meetings Docket</div>
-        ${actionBtn}
-      </div>
-      <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:24px;">
-          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px;">
-            <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--text-muted);">Upcoming Session</div>
-            <div style="font-size:20px;font-weight:800;color:var(--primary);margin-top:4px;">October 15, 2026</div>
-            <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">10:00 AM &bull; Bureau Conference Room &amp; Video Link</p>
-          </div>
-          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px;">
-            <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--text-muted);">Meeting Docket</div>
-            <div style="font-size:20px;font-weight:800;color:var(--primary-light);margin-top:4px;">4 Protocols</div>
-            <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">Full Board Review &amp; 2 Amendments</p>
-          </div>
-          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px;">
-            <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--text-muted);">Quorum Confirmation</div>
-            <div style="font-size:20px;font-weight:800;color:var(--success);margin-top:4px;">8 / 10 Confirmed</div>
-            <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">Minimum quorum: 5 members</p>
-          </div>
-        </div>
+    var rows = items.map(function(meeting) {
+      return '<tr>' +
+        '<td>' + escapeValue(meeting.meeting_number || meeting.meeting_id || '') + '</td>' +
+        '<td>' + escapeValue(String(meeting.meeting_date || '').substring(0, 10)) + '</td>' +
+        '<td>' + escapeValue(meeting.meeting_time || '') + '</td>' +
+        '<td>' + escapeValue(meeting.venue || '') + '</td>' +
+        '<td>' + escapeValue(meeting.status || '') + '</td>' +
+        '<td>' + escapeValue(meeting.agenda_summary || '') + '</td>' +
+      '</tr>';
+    }).join('');
 
-        <!-- Upcoming Session Protocol Agenda Docket -->
-        <h4 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin-bottom:14px;">
-          <i class="fas fa-clipboard-list" style="color:var(--primary-light);margin-right:6px;"></i> Active Docket: Protocols Scheduled for Full Board Deliberation (October 15, 2026)
-        </h4>
-        <div class="table-responsive" style="margin-bottom:28px;">
-          <table class="data-table">
-            <thead>
-              <tr><th>Protocol Code</th><th>Study Title</th><th>Assigned Lead Reviewer</th><th>Review Type</th><th>Agenda Item</th><th>Action</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="protocol-code" style="cursor:pointer;" onclick="navigateTo('protocol-detail','IRERC-2026-0001')">IRERC-2026-0001</span></td>
-                <td><strong>Evaluation of Real-Time PCR vs Rapid Diagnostic Tests for Cholera Outbreak Surveillance</strong></td>
-                <td><span class="badge badge-submitted">Dr. Hanna Tadesse (Lead)</span></td>
-                <td><span class="badge badge-review">Full Board Review</span></td>
-                <td><span class="badge badge-conditions">Docket #1</span></td>
-                <td>
-                  <div style="display:flex;gap:6px;">
-                    <button class="btn btn-secondary btn-sm" onclick="navigateTo('protocol-detail','IRERC-2026-0001')"><i class="fas fa-folder-open"></i> Dossier</button>
-                    ${isReviewer ? `<button class="btn btn-primary btn-sm" onclick="showReviewerAssessmentModal('IRERC-2026-0001')"><i class="fas fa-pen-fancy"></i> Assess</button>` : ''}
-                  </div>
-                </td>
-              </tr>
-              <tr>
-                <td><span class="protocol-code" style="cursor:pointer;" onclick="navigateTo('protocol-detail','IRERC-2026-0005')">IRERC-2026-0005</span></td>
-                <td><strong>Cross-Sectional Survey of Antimicrobial Stewardship Practices in Private Facilities</strong></td>
-                <td><span class="badge badge-submitted">Ato Yonas Fikre</span></td>
-                <td><span class="badge badge-review">Full Board Review</span></td>
-                <td><span class="badge badge-conditions">Docket #2</span></td>
-                <td><button class="btn btn-secondary btn-sm" onclick="navigateTo('protocol-detail','IRERC-2026-0005')"><i class="fas fa-folder-open"></i> Dossier</button></td>
-              </tr>
-              <tr>
-                <td><span class="protocol-code" style="cursor:pointer;" onclick="navigateTo('protocol-detail','IRERC-2026-0006')">IRERC-2026-0006</span></td>
-                <td><strong>Randomized Controlled Trial of Mobile Health (mHealth) SMS Reminders for Antenatal Care</strong></td>
-                <td><span class="badge badge-submitted">Dr. Daniel Worku</span></td>
-                <td><span class="badge badge-review">Full Board Review</span></td>
-                <td><span class="badge badge-conditions">Docket #3</span></td>
-                <td><button class="btn btn-secondary btn-sm" onclick="navigateTo('protocol-detail','IRERC-2026-0006')"><i class="fas fa-folder-open"></i> Dossier</button></td>
-              </tr>
-              <tr>
-                <td><span class="protocol-code" style="cursor:pointer;" onclick="navigateTo('protocol-detail','IRERC-2026-0008')">IRERC-2026-0008</span></td>
-                <td><strong>Prospective Cohort Study on Second-Line ART Treatment Failure Biomarkers</strong></td>
-                <td><span class="badge badge-submitted">Dr. Selamawit Bekele</span></td>
-                <td><span class="badge badge-review">Full Board Review</span></td>
-                <td><span class="badge badge-conditions">Docket #4</span></td>
-                <td><button class="btn btn-secondary btn-sm" onclick="navigateTo('protocol-detail','IRERC-2026-0008')"><i class="fas fa-folder-open"></i> Dossier</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+    var body = items.length
+      ? '<div class="table-responsive"><table class="data-table"><thead><tr><th>Meeting</th><th>Date</th><th>Time</th><th>Venue</th><th>Status</th><th>Agenda</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div style="text-align:center;padding:36px;color:var(--text-muted);"><i class="fas fa-calendar-times fa-2x"></i><p style="margin-top:12px;">No meeting records are available.</p></div>';
 
-        <h4 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin-bottom:14px;">Recent IRERC Session Minutes &amp; Determination Docket</h4>
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr><th>Session Code</th><th>Date</th><th>Presiding Chair</th><th>Quorum</th><th>Protocols Deliberated</th><th>Determinations</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="protocol-code">IRERC-MTG-2026-08</span></td>
-                <td>2026-08-25</td><td>Dr. Daniel Worku</td><td>7 Members</td><td>5 Protocols</td>
-                <td><span class="badge badge-approved">4 Clearances Granted</span></td>
-                <td><span class="badge badge-complete">Minutes Signed</span></td>
-              </tr>
-              <tr>
-                <td><span class="protocol-code">IRERC-MTG-2026-07</span></td>
-                <td>2026-07-28</td><td>Dr. Selamawit Bekele</td><td>6 Members</td><td>4 Protocols</td>
-                <td><span class="badge badge-approved">3 Clearances Granted</span></td>
-                <td><span class="badge badge-complete">Minutes Signed</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-  container.innerHTML = html;
+    container.innerHTML = '<div class="card"><div class="card-header"><div class="card-title"><i class="fas fa-users"></i> IRERC Meetings</div></div><div class="card-body">' + body + '</div></div>';
+  }, function(error) {
+    var message = error && error.message ? error.message : String(error || 'Unable to load meeting records.');
+    var safeMessage = message.replace(/[&<>"']/g, function(character) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character];
+    });
+    container.innerHTML = '<div class="card"><div class="card-body" style="color:var(--danger-text);">' + safeMessage + '</div></div>';
+  });
 }
 
 // ============================================================================
@@ -3175,51 +3087,14 @@ function renderAuditView() {
 // ============================================================================
 function renderSettingsView() {
   var container = document.getElementById('content-container');
-  var html = `
-    <div class="card" style="max-width:840px;margin:0 auto;">
-      <div class="card-header">
-        <div class="card-title"><i class="fas fa-sliders-h"></i> System Settings &amp; Demo Configuration</div>
-      </div>
-      <div class="card-body">
-        <h4 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin-bottom:12px;">Simulate User Role</h4>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px;">
-          <button class="btn btn-secondary btn-sm" onclick="switchUserRole('System Administrator')"><i class="fas fa-user-shield"></i> System Administrator</button>
-          <button class="btn btn-secondary btn-sm" onclick="switchUserRole('IRERC Secretary / Administrative Officer')"><i class="fas fa-user-tie"></i> Secretariat / Admin Officer</button>
-          <button class="btn btn-secondary btn-sm" onclick="switchUserRole('Chairperson')"><i class="fas fa-gavel"></i> Chairperson</button>
-          <button class="btn btn-secondary btn-sm" onclick="switchUserRole('Vice Chairperson')"><i class="fas fa-user-check"></i> Vice Chairperson</button>
-          <button class="btn btn-secondary btn-sm" onclick="switchUserRole('IRERC Member / Reviewer')"><i class="fas fa-microscope"></i> Committee Reviewer</button>
-          <button class="btn btn-secondary btn-sm" onclick="switchUserRole('Investigator')"><i class="fas fa-user-graduate"></i> Principal Investigator</button>
-        </div>
-
-        <h4 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin-bottom:12px;border-top:1px solid var(--border-light);padding-top:18px;">
-          Institutional Governance Parameters
-        </h4>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;font-size:12.5px;margin-bottom:24px;background:#f8fafc;padding:16px;border-radius:6px;border:1px solid var(--border);">
-          <div><strong>Protocol Code Format:</strong> IRERC-YYYY-XXXX</div>
-          <div><strong>Standard Review Turnaround:</strong> 7–14 Working Days</div>
-          <div><strong>Full Board Review Quorum:</strong> Minimum 5 Members</div>
-          <div><strong>Institutional Authority:</strong> Addis Ababa Health Bureau</div>
-        </div>
-
-        <h4 style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin-bottom:12px;border-top:1px solid var(--border-light);padding-top:18px;">
-          Database Seeder &amp; Demonstration Reset
-        </h4>
-        <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:16px;">
-          Re-seeds the relational database with 10 Principal Investigators, 10 Multidisciplinary Committee Members, and 20 realistic protocols covering all workflow statuses.
-        </p>
-        <button class="btn btn-accent" onclick="triggerSeedData()"><i class="fas fa-database"></i> Seed Realistic Demo Data</button>
-      </div>
-    </div>
-  `;
-  container.innerHTML = html;
-}
-
-function triggerSeedData() {
-  if (!confirm('This will seed the database with demo protocols and members. Proceed?')) return;
-  callBackend('apiSeedDemoData', [], function(res) {
-    showToast('Database successfully seeded with realistic demo data!', 'success');
-    navigateTo('dashboard');
-  });
+  container.innerHTML = '<div class="card" style="max-width:840px;margin:0 auto;">' +
+    '<div class="card-header"><div class="card-title"><i class="fas fa-sliders-h"></i> System Settings</div></div>' +
+    '<div class="card-body">' +
+      '<h4 style="font-family:\'Outfit\',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin-bottom:12px;">Configuration</h4>' +
+      '<p style="font-size:13px;color:var(--text-muted);line-height:1.7;">System configuration and Google resource access are managed by authorized administrators in the Apps Script project. Contact your system administrator to request a configuration change.</p>' +
+      '<h4 style="font-family:\'Outfit\',sans-serif;font-size:15px;font-weight:700;color:var(--primary);margin:22px 0 12px;">Account security</h4>' +
+      '<p style="font-size:13px;color:var(--text-muted);line-height:1.7;">Your account permissions are determined by your assigned role. Sign out when you finish using the portal.</p>' +
+    '</div></div>';
 }
 
 // ============================================================================
@@ -3239,7 +3114,7 @@ function showAssignModal(protocolId) {
     });
 
     var options = reviewers.map(function(m, i) {
-      var name = m.full_name.replace('[DEMO DATA] ','');
+      var name = m.full_name;
       return `<option value="USR-MBR-0${i+4}">${name} (${m.professional_category} — ${m.institution})</option>`;
     }).join('');
 
@@ -3903,7 +3778,7 @@ function renderMonitoringView() {
       var daysLeft = p.expiry_date ? Math.ceil((new Date(p.expiry_date) - new Date()) / 86400000) : null;
       return '<tr>' +
         '<td><span class="protocol-code" style="font-size:11px;">' + p.protocol_id + '</span></td>' +
-        '<td style="font-size:12.5px;max-width:280px;">' + (p.study_title || '').replace('[DEMO DATA] ','') + '</td>' +
+        '<td style="font-size:12.5px;max-width:280px;">' + (p.study_title || '') + '</td>' +
         '<td style="font-size:12px;">' + (p.pi_name || '') + '</td>' +
         '<td>' + statusBadge(p.current_status) + (extraBadge || '') + '</td>' +
         '<td style="font-size:11.5px;font-family:\'JetBrains Mono\',monospace;">' + (p.data_collection_start_date || '—') + '</td>' +
@@ -4071,7 +3946,7 @@ function renderDataCollectionView(protocolId) {
           '<div class="card-body" style="padding:20px 24px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">' +
           '<div><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap;"><span class="protocol-code">' + p.protocol_id + '</span>' + statusBadge(p.current_status) + '</div>' +
-          '<div style="font-weight:700;color:var(--primary);font-size:14px;margin-bottom:4px;">' + (p.study_title||'').replace('[DEMO DATA] ','') + '</div>' +
+          '<div style="font-weight:700;color:var(--primary);font-size:14px;margin-bottom:4px;">' + (p.study_title||'') + '</div>' +
           (p.study_site ? '<div style="font-size:12px;color:var(--text-muted);"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:var(--primary-light);"></i>' + p.study_site + '</div>' : '') +
           (p.data_collection_start_date ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;"><i class="fas fa-calendar-alt" style="margin-right:4px;"></i>Started: ' + p.data_collection_start_date + '</div>' : '') +
           (p.expiry_date ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;"><i class="fas fa-hourglass-end" style="margin-right:4px;"></i>Clearance expires: ' + p.expiry_date + '</div>' : '') +
@@ -4400,7 +4275,7 @@ function renderInvestigatorsView() {
         '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">' + protos.map(function(p){
           return '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:6px 8px;background:var(--surface-alt);border-radius:var(--radius-sm);border-left:3px solid var(--primary-light);cursor:pointer;" onclick="navigateTo(\'protocol-detail\',\'' + p.protocol_id + '\')">' +
             '<i class="fas fa-file-medical" style="color:var(--primary-light);flex-shrink:0;"></i>' +
-            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (p.study_title||'').replace('[DEMO DATA] ','') + '</span>' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (p.study_title||'') + '</span>' +
             statusBadge(p.current_status) + '</div>';
         }).join('') + '</div>';
 
@@ -4408,7 +4283,7 @@ function renderInvestigatorsView() {
         '<div class="card-body" style="padding:20px;">' +
         '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">' +
           '<div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#0f2744,#2563eb);color:white;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + initials + '</div>' +
-          '<div style="flex:1;min-width:0;"><div style="font-weight:700;color:var(--primary);font-size:14px;">' + (inv.full_name||'').replace('[DEMO DATA] ','') + '</div>' +
+          '<div style="flex:1;min-width:0;"><div style="font-weight:700;color:var(--primary);font-size:14px;">' + (inv.full_name||'') + '</div>' +
           '<div style="font-size:11.5px;color:var(--text-muted);font-family:\'JetBrains Mono\',monospace;">' + inv.email + '</div>' +
           '<div style="margin-top:2px;">' + statusBadge + ' <span class="badge badge-submitted">' + (inv.protocol_count||0) + ' protocol' + ((inv.protocol_count||0)===1?'':'s') + '</span></div></div></div>' +
         '<div style="font-size:12.5px;line-height:1.7;color:var(--text-main);">' +
@@ -4438,124 +4313,21 @@ function renderInvestigatorsView() {
 }
 
 // ============================================================================
-// PROPOSAL DOCUMENT VIEWER — Google Docs-style in a new browser tab
-// ============================================================================
+/**
+ * Opens a document only when the backend provides a valid Google Drive link.
+ */
 function viewDocument(fileName, driveUrl, docTitle) {
-  // In production (GAS), driveUrl points to the converted Google Doc — open directly.
-  if (driveUrl && driveUrl !== '#' && driveUrl.indexOf('http') === 0) {
-    window.open(driveUrl, '_blank');
+  var target;
+  try {
+    target = new URL(String(driveUrl || ''));
+  } catch (error) {
+    showToast('The document does not have a valid Google Drive link.', 'warning');
     return;
   }
-  // In preview/mock mode, render a styled in-browser document viewer.
-  var w = window.open('', '_blank');
-  if (!w) { showToast('Please allow pop-ups to view the document.', 'warning'); return; }
-
-  // Determine document type for icon and content
-  var isWord = /\.(docx|doc)$/i.test(fileName || '');
-  var isPdf  = /\.pdf$/i.test(fileName || '');
-  var isZip  = /\.zip$/i.test(fileName || '');
-  var isImg  = /\.(jpg|jpeg|png)$/i.test(fileName || '');
-  var icon = isWord ? 'fa-file-word' : isPdf ? 'fa-file-pdf' : isZip ? 'fa-file-archive' : isImg ? 'fa-file-image' : 'fa-file-alt';
-  var iconColor = isWord ? '#2563eb' : isPdf ? '#dc2626' : isZip ? '#7c3aed' : isImg ? '#7c3aed' : '#475569';
-
-  // Build mock proposal content for the golden/known protocol docs; generic placeholder otherwise.
-  var bodyContent = '';
-  if (isWord) {
-    bodyContent = generateMockProposalContent_(docTitle || fileName || 'Research Proposal');
-  } else if (isZip) {
-    bodyContent = '<div style="text-align:center;padding:40px;"><i class="fas fa-file-archive" style="font-size:48px;color:#7c3aed;"></i><h3 style="margin-top:16px;color:#0f172a;">Research Findings Archive</h3><p style="color:#64748b;">' + (fileName||'findings.zip') + '</p><p style="color:#64748b;max-width:480px;margin:16px auto;">This ZIP archive contains the final research report (PDF), complete dataset (XLSX), analysis scripts, and supporting materials. In production, the bundled contents are listed and individually downloadable.</p><div style="background:#f1f5f9;border-radius:8px;padding:16px;max-width:420px;margin:0 auto;text-align:left;font-size:13px;color:#334155;"><strong>Archive contents:</strong><ul style="margin:8px 0 0 0;padding-left:20px;line-height:1.9;"><li>Final_Research_Report.pdf</li><li>Complete_Dataset.xlsx</li><li>Analysis_Scripts/ (R + Stata)</li><li>Codebook.pdf</li><li>Consent_Forms_Signed.zip</li></ul></div></div>';
-  } else if (isImg) {
-    bodyContent = '<div style="text-align:center;padding:40px;"><i class="fas ' + icon + '" style="font-size:48px;color:' + iconColor + ';"></i><h3 style="margin-top:16px;color:#0f172a;">' + (docTitle||fileName||'Image') + '</h3><p style="color:#64748b;">Image document — in production this renders inline from Google Drive.</p></div>';
-  } else {
-    bodyContent = '<div style="text-align:center;padding:60px;"><i class="fas ' + icon + '" style="font-size:48px;color:' + iconColor + ';"></i><h3 style="margin-top:16px;color:#0f172a;">' + (docTitle||fileName||'Document') + '</h3><p style="color:#64748b;">Document preview — in production this opens in the Google Docs viewer from Drive.</p></div>';
+  if (target.protocol !== 'https:' || !['drive.google.com', 'docs.google.com'].includes(target.hostname)) {
+    showToast('The document does not have a valid Google Drive link.', 'warning');
+    return;
   }
-
-  var docHtml = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>' + (docTitle || fileName || 'Document Viewer') + ' — AAPHREML-IRERC</title>' +
-    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">' +
-    '<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">' +
-    '<style>' +
-    'body{margin:0;font-family:Inter,sans-serif;background:#f1f5f9;color:#0f172a;}' +
-    '.doc-toolbar{position:fixed;top:0;left:0;right:0;height:52px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;padding:0 20px;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,0.05);}' +
-    '.doc-toolbar-left{display:flex;align-items:center;gap:12px;}' +
-    '.doc-logo{width:32px;height:32px;border-radius:50%;object-fit:cover;}' +
-    '.doc-title-bar{font-family:Outfit,sans-serif;font-weight:700;font-size:14px;color:#0f2744;}' +
-    '.doc-subtitle{font-size:11px;color:#94a3b8;font-weight:500;}' +
-    '.doc-toolbar-right{display:flex;align-items:center;gap:10px;}' +
-    '.doc-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid #e2e8f0;background:#fff;color:#334155;transition:all .15s;}' +
-    '.doc-btn:hover{background:#f8fafc;border-color:#cbd5e1;}' +
-    '.doc-btn-primary{background:#0f2744;color:#fff;border-color:#0f2744;}' +
-    '.doc-btn-primary:hover{background:#1e2a4a;}' +
-    '.doc-page{max-width:820px;margin:72px auto 40px;background:#fff;min-height:1000px;padding:60px 70px;box-shadow:0 2px 12px rgba(0,0,0,0.08);border-radius:2px;}' +
-    '.doc-page h1{font-family:Outfit,sans-serif;font-size:22px;font-weight:800;color:#0f2744;text-align:center;margin:0 0 4px;text-transform:uppercase;letter-spacing:.3px;}' +
-    '.doc-page h2{font-family:Outfit,sans-serif;font-size:15px;font-weight:700;color:#0f2744;margin:28px 0 10px;border-bottom:1.5px solid #c8972a;padding-bottom:6px;}' +
-    '.doc-page h3{font-size:13.5px;font-weight:700;color:#1e293b;margin:20px 0 8px;}' +
-    '.doc-page p{font-size:12.5px;line-height:1.85;color:#1e293b;margin:0 0 12px;text-align:justify;}' +
-    '.doc-page ul{font-size:12.5px;line-height:1.8;color:#1e293b;margin:0 0 12px;padding-left:22px;}' +
-    '.doc-meta{text-align:center;font-size:11px;color:#64748b;margin:4px 0 24px;}' +
-    '.doc-header-rule{border:none;border-top:2px solid #c8972a;margin:16px 0 28px;}' +
-    '.doc-section-num{display:inline-block;background:#c8972a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;margin-right:8px;}' +
-    '@media(max-width:700px){.doc-page{padding:30px 24px;margin:60px 12px 24px;}.doc-toolbar{padding:0 12px;}.doc-title-bar{font-size:12px;}}' +
-    '</style></head><body>' +
-    '<div class="doc-toolbar">' +
-      '<div class="doc-toolbar-left">' +
-        '<img class="doc-logo" src="' + window.APP_ASSETS.logo + '" alt="Logo">' +
-        '<div><div class="doc-title-bar">AAPHREML-IRERC Document Viewer</div><div class="doc-subtitle">' + (docTitle || fileName || 'Document') + '</div></div>' +
-      '</div>' +
-      '<div class="doc-toolbar-right">' +
-        '<a class="doc-btn" href="' + (driveUrl && driveUrl !== '#' ? driveUrl : '#') + '" download="' + (fileName||'document') + '"><i class="fas fa-download"></i> Download</a>' +
-        '<button class="doc-btn doc-btn-primary" onclick="window.print()"><i class="fas fa-print"></i> Print</button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="doc-page">' + bodyContent + '</div>' +
-    '</body></html>';
-
-  w.document.open();
-  w.document.write(docHtml);
-  w.document.close();
-  showToast('Opening document in new tab…', 'info');
-}
-
-// Generates a realistic mock proposal document body for the in-browser viewer
-function generateMockProposalContent_(title) {
-  var sections = [
-    {n:'1', t:'Title', body:'<p>' + (title||'Research Protocol') + '</p>'},
-    {n:'2', t:'Abstract', body:'<p>This study aims to evaluate integrated maternal-child health interventions across selected sub-cities of Addis Ababa. The abstract summarises the rationale, objectives, methodology, anticipated outcomes, and ethical considerations of the proposed research.</p>'},
-    {n:'3', t:'Background', body:'<p>Maternal and child health remains a priority area for the Addis Ababa City Administration Health Bureau. Despite progress in antenatal coverage, disparities persist across sub-cities. This study provides the evidence base for targeted intervention design.</p>'},
-    {n:'4', t:'Problem Statement', body:'<p>Low antenatal visit completion and high rates of low birth weight continue to challenge MCH outcomes in informal settlements. There is limited locally-generated evidence on bundled community and facility interventions.</p>'},
-    {n:'5', t:'General Objective', body:'<p>To evaluate the combined impact of bundled antenatal SMS reminders, community health worker home visits, and integrated postnatal care on maternal and child health outcomes.</p>'},
-    {n:'6', t:'Specific Objectives', body:'<ul><li>Assess the effect of SMS reminders on 4th ANC visit attendance</li><li>Measure reduction in low birth weight prevalence</li><li>Evaluate acceptability among providers and mothers</li><li>Generate evidence for city-wide scale-up</li></ul>'},
-    {n:'7', t:'Literature Review', body:'<p>A review of regional and global evidence on mHealth interventions, community health worker programmes, and integrated MCH service delivery models is presented, identifying gaps this study addresses.</p>'},
-    {n:'8', t:'Study Area', body:'<p>The study will be conducted in Addis Ketema, Bole, and Yekatit 12 catchment areas of Addis Ababa City Administration.</p>'},
-    {n:'9', t:'Study Period', body:'<p>Data collection will run for 18 months from March 2026 to August 2027, with a 6-month follow-up period.</p>'},
-    {n:'10', t:'Study Design', body:'<p>Mixed-methods prospective cohort study with a stepped-wedge cluster-randomised implementation component.</p>'},
-    {n:'11', t:'Source Population', body:'<p>All pregnant women aged 18 years and above residing in the selected catchment areas.</p>'},
-    {n:'12', t:'Study Population', body:'<p>Pregnant women presenting for their first antenatal visit at the selected health facilities, followed through 6 months postpartum.</p>'},
-    {n:'13', t:'Inclusion Criteria', body:'<ul><li>Age ≥18 years</li><li>Resident of the catchment area</li><li>Willing to provide written informed consent</li></ul>'},
-    {n:'14', t:'Exclusion Criteria', body:'<ul><li>Severe medical complication requiring referral</li><li>Planned relocation outside the catchment during the study period</li></ul>'},
-    {n:'15', t:'Sample Size Determination', body:'<p>A total of 450 mother-child pairs (150 per site) provides 80% power at 5% significance to detect a 30% improvement in 4th ANC visit attendance.</p>'},
-    {n:'16', t:'Sampling Technique', body:'<p>Consecutive enrolment at first antenatal visit, with community mobilisation via health extension workers.</p>'},
-    {n:'17', t:'Variables', body:'<p>Independent: intervention exposure. Dependent: ANC visit attendance, birth weight, postnatal care uptake. Confounders: maternal age, parity, education, wealth quintile.</p>'},
-    {n:'18', t:'Operational Definitions', body:'<p>Key terms including "adequate ANC", "low birth weight", and "postnatal care contact" are defined per WHO and national guidelines.</p>'},
-    {n:'19', t:'Data Collection Tools', body:'<p>Structured interviewer-administered questionnaire, maternal health record extraction form, and infant anthropometry form.</p>'},
-    {n:'20', t:'Data Collection Procedure', body:'<p>Trained female nurses administer the questionnaire at first ANC visit; follow-up at 6 weeks and 6 months postpartum.</p>'},
-    {n:'21', t:'Data Quality Assurance', body:'<p>Pre-testing of tools, supervisor verification, double data entry, and range checks ensure data integrity.</p>'},
-    {n:'22', t:'Data Processing and Analysis', body:'<p>Intention-to-treat analysis with generalised linear mixed models; qualitative thematic analysis of provider interviews.</p>'},
-    {n:'23', t:'Ethical Consideration', body:'<p>Written informed consent in Amharic; no inducement; flexible scheduling; referral pathway for distress; ethics approval from AAPHREML-IRERC.</p>'},
-    {n:'24', t:'Dissemination Plan', body:'<p>Findings shared with the Health Bureau, participating facilities, and community stakeholders; peer-reviewed publication and policy brief.</p>'},
-    {n:'25', t:'Work Plan / Time Schedule', body:'<p>Preparation (Jan–Feb 2026), data collection (Mar 2026–Aug 2027), analysis (Sep–Nov 2027), dissemination (Dec 2027).</p>'},
-    {n:'26', t:'Budget', body:'<p>Itemised budget covering personnel, fieldwork, transport, supplies, and dissemination — total estimated at 1.8 million ETB.</p>'},
-    {n:'27', t:'References', body:'<p>WHO, FMOH Ethiopia, and peer-reviewed MCH intervention literature are cited per the Harvard referencing style.</p>'},
-    {n:'28', t:'Annex / Appendix', body:'<p>Consent forms (Amharic and English), questionnaires, anthropometry forms, and the stepped-wedge randomisation plan are attached.</p>'}
-  ];
-  var html = '<h1>Research Protocol</h1>' +
-    '<div class="doc-meta">Submitted to AAPHREML-IRERC · Addis Ababa City Administration Health Bureau</div>' +
-    '<div class="doc-meta"><strong>' + (title||'') + '</strong></div>' +
-    '<hr class="doc-header-rule">';
-  sections.forEach(function(s){
-    html += '<h2><span class="doc-section-num">' + s.n + '</span>' + s.t + '</h2>' + s.body;
-  });
-  html += '<hr class="doc-header-rule" style="margin-top:32px;"><p style="text-align:center;font-size:11px;color:#94a3b8;">— End of Document — Generated for preview. In production this renders from the actual Google Doc. —</p>';
-  return html;
+  window.open(target.href, '_blank', 'noopener,noreferrer');
 }
 </script>
