@@ -1,6 +1,6 @@
 # GitHub and Google Integration
 
-GitHub stores and reviews the application source. Google Apps Script runs the current portal, Google Sheets stores application metadata, and a restricted Google Drive folder stores uploaded documents. The repository includes no Google credentials, Apps Script project ID, deployment ID, database spreadsheet ID, or scanner spreadsheet ID. The Drive folder ID supplied by the owner is configured in `server/Config.gs`; access by the Apps Script execution account has not been verified.
+GitHub stores and reviews the application source. Google Apps Script runs the current portal, Google Sheets stores application metadata, and a restricted Google Drive folder stores uploaded documents. The repository includes no Google credentials, Apps Script project ID, or deployment ID. The owner-provided database, scanner, and Drive folder IDs are configured in `server/Config.gs`; access by the Apps Script execution account has not been verified.
 
 ## Current architecture
 
@@ -15,8 +15,8 @@ A GitHub Pages page cannot use `google.script.run` directly. A separate API brid
 An authorized institutional owner should:
 
 1. Create an Apps Script web-app project and enable the Apps Script API for the deploying account.
-2. Use the Drive folder already supplied for protocol documents; its ID is preconfigured as `CFG.FOLDER_ID` in `server/Config.gs`. Create institution-owned database and scanner spreadsheets.
-3. Set `CFG.DB_SS_ID` and `CFG.SHEET_ID` to the approved spreadsheet IDs. The database spreadsheet remains required; the Drive folder cannot replace it. Keep IDs out of public source where institutional policy requires it, and ensure the Apps Script execution account has Editor access to the Drive folder and required spreadsheet access.
+2. Use the supplied Drive folder for protocol documents; its ID is preconfigured as `CFG.FOLDER_ID` in `server/Config.gs`.
+3. The database and scanner spreadsheet IDs from the owner-provided URLs are preconfigured as `CFG.DB_SS_ID` and `CFG.SHEET_ID`. Confirm that the Apps Script execution account can access both spreadsheets and has Editor access to the Drive folder before deployment. Keep IDs out of public source where institutional policy requires it.
 4. Authenticate clasp with an institution-authorized account. Keep the project ID in a local `.clasp.json` or a protected GitHub environment variable.
 5. Run `initDatabase_()` in Apps Script and authorize the requested services.
 6. Set `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 12 characters in Script Properties. Run `bootstrapAdministrator_()` once; the temporary properties are removed after success.
