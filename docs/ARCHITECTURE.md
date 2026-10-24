@@ -7,7 +7,7 @@
 
 ## 1. Architecture Overview
 
-The source is a modular Google Apps Script HtmlService application. The supplied Drive document folder ID is configured in `server/Config.gs`, but its access by Apps Script is not verified. Database/scanner spreadsheet IDs, the Apps Script project, deployment, and Google authorization remain owner setup requirements. The compiled local preview has no sample records or backend connection.
+The source is a modular Google Apps Script HtmlService application. The owner-provided database, scanner, and Drive folder IDs are configured in `server/Config.gs`, but access by Apps Script is not verified. The Apps Script project, deployment, and Google authorization remain owner setup requirements. The compiled local preview has no sample records or backend connection.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
