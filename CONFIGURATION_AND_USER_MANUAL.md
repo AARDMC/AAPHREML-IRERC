@@ -153,7 +153,7 @@ Open [`server/Config.gs`](server/Config.gs) to configure your institutional Goog
 ### Step 4.2: Configure Google Drive Vault Folder
 The Drive folder supplied for this integration is preconfigured as `CFG.FOLDER_ID` in `server/Config.gs`. The application creates protocol-specific subfolders there. Ensure the Apps Script execution account has Editor access to that folder, and keep its Drive sharing restricted to approved staff.
 
-Create a separate institution-owned spreadsheet for scanner output and set its ID in `CFG.SHEET_ID`. The primary database spreadsheet ID `CFG.DB_SS_ID` remains blank until an authorized owner configures it. Database operations fail closed until that ID is set; the code will not select an active spreadsheet or create a database automatically.
+The owner-provided database and scanner spreadsheets are configured in `CFG.DB_SS_ID` and `CFG.SHEET_ID`. Confirm that the Apps Script execution account can access both. Run `initDatabase_()` to create the empty database schema tabs; scanner output tabs are created when the scanner runs. No database initialization or scanner run has been performed by this source change.
 
 ### Step 4.3: Initialize Tables & System Admin
 1. In the Apps Script editor, run **`initDatabase_`** and grant the requested permissions.
@@ -180,8 +180,8 @@ Before using any live records, confirm the spreadsheet and Drive IDs in `server/
 
 | Config Key | Description | Repository value |
 |---|---|---|
-| `CFG.DB_SS_ID` | Primary Google Sheets database ID | Blank; set an owner-approved ID |
-| `CFG.SHEET_ID` | Scanner output spreadsheet ID | Blank; set an owner-approved ID |
+| `CFG.DB_SS_ID` | Primary Google Sheets database ID | User-provided spreadsheet ID configured; access not verified |
+| `CFG.SHEET_ID` | Scanner output spreadsheet ID | User-provided spreadsheet ID configured; access not verified |
 | `CFG.FOLDER_ID` | Google Drive document vault folder ID | Provided folder ID configured; access not verified |
 | `CFG.PROTOCOL_ID_PREFIX` | Protocol code prefix | `AAPHREML-IRERC` |
 | `CFG.ETHICS_QUORUM` | Minimum approvals for quorum | `2` |
