@@ -16,7 +16,7 @@ The application is a modular Apps Script HtmlService project. It has not been co
 
 ## Owner setup
 
-Use institution-owned spreadsheets and a restricted Drive folder. Set the approved resource IDs in `server/Config.gs`, initialize the database from Apps Script, and bootstrap the first administrator through temporary Script Properties. Test with separate non-production resources before connecting records.
+The supplied restricted Drive folder is preconfigured as the document vault in `server/Config.gs`; verify the Apps Script execution account has Editor access. Set the still-required database and scanner spreadsheet IDs, initialize the database from Apps Script, and bootstrap the first administrator through temporary Script Properties. Test with separate non-production resources before connecting records.
 
 ## Security
 
