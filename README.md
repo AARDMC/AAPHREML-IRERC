@@ -1,38 +1,29 @@
 # AAPHREML-IRERC Research Ethics Portal
 
-This repository contains the complete source for the Addis Ababa City Administration Health Bureau Institutional Research Ethics Review Committee (IRERC) portal. It is a dedicated portal repository; its Apps Script source is at the repository root.
+This repository contains the portal source for the Addis Ababa City Administration Health Bureau Institutional Research Ethics Review Committee.
 
-## Contents
+## Source layout
 
-- `Code.gs`, `server/`: Apps Script entry point, API, and server services
-- `Index.html`, `client/`, `styles/`: HtmlService application
-- `preview.html`: compiled standalone mock-data preview (not a production service)
-- `build_preview.ps1`: rebuilds the preview from its source files
-- `docs/`, `CONFIGURATION_AND_USER_MANUAL.md`: setup and operating documentation
-- `.github/workflows/deploy-irerc.yml`: optional protected deployment workflow
+- `Code.gs` and `server/`: Apps Script entry point, API dispatch, authentication, and server services
+- `Index.html`, `client/`, and `styles/`: HtmlService user interface
+- `appsscript.json`: Apps Script project manifest
+- `docs/` and the setup manuals: configuration and operating guidance
 
-## Current deployment status
+The repository contains no sample accounts, seeded protocol records, default administrator credentials, Apps Script project IDs, or Google resource IDs. The interface preview is disconnected from Google services and contains no simulated user or protocol records.
 
-This repository does **not** contain an Apps Script project ID, deployment ID, Google authorization, or verified access to institutional Sheets or Drive resources. The portal is not confirmed deployed or live. The first Apps Script project and web-app deployment must be created manually by an authorized owner.
+## Deployment status
 
-`preview.html` uses simulated users and data, does not connect to Apps Script or Google resources, and must not be used with real protocol or participant information. Rebuild it with `.\build_preview.ps1`.
+The repository does not confirm a live Apps Script deployment or access to any institutional spreadsheet or Drive folder. An authorized owner must create and configure those resources before using real information.
 
-## Owner-authorized Google setup
+The current project is modular and serves its interface through Apps Script HtmlService. The current deployment workflow pushes the modular source tree. It has not been converted to deploy a single generated `Code.gs` file or to run a live frontend from GitHub Pages. Do not enable production deployment until the target architecture is updated to match those requirements.
 
-1. Create institution-owned database and scanner spreadsheets, a restricted Drive vault folder, and an Apps Script web-app project. Verify resource ownership and access before configuring them.
-2. Set `CFG.DB_SS_ID`, `CFG.SHEET_ID`, and `CFG.FOLDER_ID` in `server/Config.gs` to the approved resources. The IDs are intentionally blank in this repository; operations fail when required resources are not configured.
-3. Enable the Apps Script API and authenticate `clasp` with an institution-authorized account. Set the new project ID in a local `.clasp.json` (do not commit it), then run `clasp push`.
-4. In the Apps Script editor, run `initDatabase_()` and authorize the requested Google services.
-5. Set `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 12 characters in Script Properties. Run `bootstrapAdministrator_()` once; successful bootstrap removes both properties. No administrator or default password is included.
-6. Upload the official signature to restricted Drive storage and set `SIGNATURE_FILE_ID` in Script Properties. The image is not in Git or the preview.
-7. Create and test the first web-app deployment manually using non-production data. Confirm the executing account, access policy, resource permissions, backups, and retention requirements with the institution before production use.
+## Owner setup
 
-The portal uses password authentication and server-issued eight-hour sessions. Google sign-in fails closed until a verifiable OAuth flow is implemented. New account passwords must be at least 12 characters and not already used by another account. Passwords are salted with SHA-256; this is not a slow password KDF and is a residual security limitation.
+1. Create institution-owned spreadsheets for the application database and scanner output, a restricted Drive folder for documents, and an Apps Script project.
+2. Configure the approved resource IDs in `server/Config.gs`. Keep credentials and signature images in Google/Actions secret storage, not in Git.
+3. Initialize the database from Apps Script and bootstrap the first administrator using temporary Script Properties as described in [the configuration manual](CONFIGURATION_AND_USER_MANUAL.md).
+4. Test with a separate non-production spreadsheet and Drive folder. Confirm the access policy, execution identity, backups, and retention rules before handling records.
 
-Demo seeding is disabled by default. Only set `ALLOW_DEMO_DATA_SEEDING=true` in a disposable test project, and remove it after use.
+The portal uses server-issued, eight-hour sessions. Password hashes use per-account salted SHA-256; this is not a slow password KDF and remains a security limitation.
 
-## Optional GitHub Actions deployment
-
-After the owner has created the Apps Script project and first web-app deployment, the optional workflow can push source updates and update that existing deployment. Configure the protected GitHub environment `irerc-production` with secret `CLASPRC_JSON` and variables `IRERC_SCRIPT_ID` and `IRERC_DEPLOYMENT_ID`. Use required reviewers and institution-owned credentials. The workflow does not create Google resources or the first deployment.
-
-See [`CONFIGURATION_AND_USER_MANUAL.md`](CONFIGURATION_AND_USER_MANUAL.md), [`GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md`](GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md), and [`docs/README.md`](docs/README.md) for details.
+See the [Google integration guide](GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md) for the current deployment boundaries and setup steps.
