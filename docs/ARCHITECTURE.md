@@ -7,7 +7,7 @@
 
 ## 1. Architecture Overview
 
-The source supports a Google Apps Script deployment and a local mock-data preview. No Apps Script project, deployment, Google authorization, or resource access is confirmed in this repository; the first project and deployment require owner setup.
+The source is a modular Google Apps Script HtmlService application. No Apps Script project, deployment, Google authorization, or resource access is confirmed in this repository; the first project and deployment require owner setup. The compiled local preview has no sample records or backend connection.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -22,10 +22,10 @@ The source supports a Google Apps Script deployment and a local mock-data previe
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│              DEMO / OFFLINE (preview.html)                      │
+│              LOCAL INTERFACE PREVIEW                            │
 │                                                                 │
-│   Browser  ──►  preview.html (self-contained)                  │
-│                  Inline mock API (no server needed)             │
+│   Browser  ──►  preview.html (layout inspection only)           │
+│                  No backend connection or simulated records     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -229,7 +229,7 @@ Post-approval lifecycle:
 
 ## 7. Automated Build System
 
-`preview.html` is a **compiled standalone single-file** demo with mock data. It does not connect to the live backend; remote font and icon assets may require an internet connection.
+`preview.html` is a **compiled interface preview** for layout inspection. It contains no simulated accounts or protocol records and does not connect to Apps Script, Sheets, or Drive. Remote font and icon assets may require an internet connection.
 
 It is built by `build_preview.ps1`, which:
 1. Reads `Index.html`
@@ -237,7 +237,7 @@ It is built by `build_preview.ps1`, which:
 3. Embeds the public logo, but not the official signature.
 4. Writes the result to `preview.html`.
 
-The mock API in `client/app.html` intercepts all `google.script.run` calls and returns realistic local data, making `preview.html` fully functional without any server connection.
+The client bridge requires `google.script.run`, which is available when the page is served by Apps Script HtmlService. Sign-in and data actions require the deployed Apps Script application.
 
 To rebuild after any source file change:
 
