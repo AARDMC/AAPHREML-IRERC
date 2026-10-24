@@ -1,39 +1,40 @@
 # GitHub and Google Integration
 
-The portal runs on Google Apps Script (GAS). Google Sheets stores application records, Google Drive stores uploaded documents, and GitHub stores and reviews source code. This repository does not include Google credentials, a project ID, a deployment ID, or confirmation that any configured resources exist or are accessible.
+GitHub stores and reviews the application source. Google Apps Script runs the current portal, Google Sheets stores application metadata, and a restricted Google Drive folder stores uploaded documents. The repository includes no Google credentials, project ID, deployment ID, or configured resource IDs.
 
-## Google Apps Script setup
+## Current architecture
 
-An authorized institutional owner must:
+The current UI is served by Apps Script HtmlService and calls backend functions with `google.script.run`. The source remains modular across `Code.gs`, `server/`, `Index.html`, `client/`, and `styles/`.
+
+This repository does not yet publish the live UI through GitHub Pages and does not yet build a single `Code.gs` for Apps Script. The current `.github/workflows/deploy-irerc.yml` pushes the modular project tree to Apps Script. Keep that workflow from production use until it is changed to match the approved hosting design.
+
+A GitHub Pages page cannot use `google.script.run` directly. A separate API bridge or a UI hosted inside Apps Script is needed before Pages can be the live frontend.
+
+## Google resource setup
+
+An authorized institutional owner should:
 
 1. Create an Apps Script web-app project and enable the Apps Script API for the deploying account.
-2. Create institution-owned spreadsheets for the application database and scanner output, plus a restricted Drive folder for protocol documents.
-3. Set `CFG.DB_SS_ID`, `CFG.SHEET_ID`, and `CFG.FOLDER_ID` in `server/Config.gs` to those approved resource IDs. The values are blank in the repository; do not use production resources until ownership, permissions, and backup/retention policies are confirmed.
-4. Authenticate clasp with an institution-authorized account and set the new Apps Script project ID in the local `.clasp.json`. The committed file intentionally has a placeholder ID. Push with `clasp push`.
-5. Run `initDatabase_()` in the Apps Script editor and authorize the requested services. Use Script Properties `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 12 characters to run `bootstrapAdministrator_()` once. The setup properties are deleted after successful bootstrap.
-6. Upload the chairperson signature to restricted Drive storage and set its ID as the `SIGNATURE_FILE_ID` Script Property. The signature is excluded from Git and the preview; an authorized API fetches it only when needed.
-7. Create the first web-app deployment manually. Test using non-production data and confirm execution identity and access policy before connecting institutional records.
+2. Create institution-owned database and scanner spreadsheets and a restricted Drive folder for protocol documents.
+3. Set `CFG.DB_SS_ID`, `CFG.SHEET_ID`, and `CFG.FOLDER_ID` in `server/Config.gs` to the approved resource IDs. Keep the IDs out of public source where required by institutional policy.
+4. Authenticate clasp with an institution-authorized account. Keep the project ID in a local `.clasp.json` or a protected GitHub environment variable.
+5. Run `initDatabase_()` in Apps Script and authorize the requested services.
+6. Set `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 12 characters in Script Properties. Run `bootstrapAdministrator_()` once; the temporary properties are removed after success.
+7. Store the official signature in restricted Drive and configure `SIGNATURE_FILE_ID` in Script Properties. Never commit the image to Git.
+8. Create the first web-app deployment manually and confirm its access policy before connecting institutional records.
 
-The application uses password login and hashed, eight-hour server sessions. All protected API endpoints require a valid session. Google sign-in is disabled until a verifiable OAuth flow is available. New account passwords must be at least 12 characters and unique across accounts. Hashes use per-account salted SHA-256, which is not a slow password KDF.
+Use a separate, non-production set of Google resources during setup. Do not use the portal with live records until ownership, permissions, backup, and retention policies have been confirmed.
 
-Demo data seeding is disabled by default. Set `ALLOW_DEMO_DATA_SEEDING=true` only in a disposable test project; demo accounts receive random passwords that are not exposed to users.
+## GitHub Actions
 
-## Optional GitHub Actions deployment
+The optional workflow requires a protected `irerc-production` environment with:
 
-The workflow is [`.github/workflows/deploy-irerc.yml`](.github/workflows/deploy-irerc.yml). It runs on demand or on source changes pushed to `main`, pushes the portal source, and updates an existing Apps Script web-app deployment. It does **not** create the Apps Script project, create the first deployment, authorize Google, or configure Sheets/Drive resources.
+- Secret `CLASPRC_JSON`: clasp credentials for the authorized account
+- Variable `IRERC_SCRIPT_ID`: Apps Script project ID
+- Variable `IRERC_DEPLOYMENT_ID`: existing web-app deployment ID
 
-After manually creating the project and first deployment, configure the protected GitHub environment `irerc-production`:
+The workflow does not create the Apps Script project, first deployment, or Google resources. Require review before production deployment. Do not commit credentials.
 
-| Name | Environment setting | Purpose |
-|---|---|---|
-| `CLASPRC_JSON` | Secret | Authorized clasp credentials JSON |
-| `IRERC_SCRIPT_ID` | Variable | Apps Script project ID |
-| `IRERC_DEPLOYMENT_ID` | Variable | Existing web-app deployment ID to update |
+## Preview
 
-Use required reviewers for this production environment. The workflow writes credentials only to the ephemeral runner. Never commit or share them.
-
-## Preview and assets
-
-`preview.html` is a local standalone mock-data demo built from `Index.html`, `client/`, and `styles/`. It does not connect to Apps Script, Sheets, or Drive. The public logo is embedded in the app source. No GitHub Pages publication is configured. Do not use real records or credentials in the preview.
-
-The official chairperson signature must remain in restricted Drive storage, configured through `SIGNATURE_FILE_ID`. Do not commit it or publish it in the preview.
+`preview.html` is a compiled layout preview. It has no sample accounts or protocol records and does not connect to Apps Script, Sheets, or Drive. The public logo may be included; the official signature stays in restricted Drive storage.
