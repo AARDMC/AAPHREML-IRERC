@@ -221,21 +221,11 @@
           <div class="auth-tab-pane active" id="pane-login">
             <div id="login-error" class="auth-error"><i class="fas fa-exclamation-circle"></i> <span></span></div>
 
-            <button type="button" class="auth-btn auth-btn-google" onclick="handleGoogleAuth('login')" id="google-login-btn">
-              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
-                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-                <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.347 2.825.957 4.039l3.007-2.332z"/>
-                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
-              </svg>
-              <span>Google sign-in (demo only)</span>
-            </button>
-
-            <div class="auth-divider">OR SIGN IN WITH EMAIL</div>
+            <div class="auth-divider">SIGN IN WITH EMAIL</div>
 
             <div class="auth-field">
               <label><i class="fas fa-envelope" style="margin-right:4px;color:#64748b;"></i> Email Address</label>
-              <input type="email" id="login-email" placeholder="e.g. pi.dereje@aau.edu.et" autocomplete="email">
+              <input type="email" id="login-email" placeholder="name@institution.org" autocomplete="email">
             </div>
             <div class="auth-field">
               <label><i class="fas fa-lock" style="margin-right:4px;color:#64748b;"></i> Password</label>
@@ -244,32 +234,7 @@
 
             <button class="auth-btn auth-btn-primary" onclick="handleLogin()" id="login-submit-btn">
               <i class="fas fa-sign-in-alt"></i> Sign In to Portal
-            </button>
-
-            <div class="auth-divider">LOCAL DEMO ROLE SHORTCUTS</div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Chairperson')">
-                <i class="fas fa-crown" style="color:#f59e0b;"></i> <span>Chairperson</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Vice Chairperson')">
-                <i class="fas fa-user-tie" style="color:#3b82f6;"></i> <span>Vice Chair</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('IRERC Secretary / Administrative Officer')">
-                <i class="fas fa-user-shield" style="color:#10b981;"></i> <span>Secretary</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('IRERC Member / Reviewer')">
-                <i class="fas fa-microscope" style="color:#8b5cf6;"></i> <span>Reviewer</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('Investigator')">
-                <i class="fas fa-graduation-cap" style="color:#ec4899;"></i> <span>Investigator</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11.5px;padding:8px 8px;text-align:left;display:flex;align-items:center;gap:6px;border-radius:8px;" onclick="quickLoginAs('System Administrator')">
-                <i class="fas fa-shield-alt" style="color:#ef4444;"></i> <span>Administrator</span>
-              </button>
-            </div>
-
-            <div class="auth-info-box">
+            </button><div class="auth-info-box">
               <p><i class="fas fa-info-circle"></i>
                 <strong>All roles</strong> (Investigator, Reviewer, Chair, Secretary, Admin) sign in with their registered email and password.
               </p>
@@ -283,21 +248,11 @@
 
             <div class="auth-info-box gold">
               <p><i class="fas fa-user-graduate"></i>
-                <strong>Investigator Registration:</strong> Google registration is for the offline demo only. Use the form below in the live portal.
+                <strong>Investigator Registration:</strong> Register with your official email address and institution details.
               </p>
             </div>
 
-            <button type="button" class="auth-btn auth-btn-google" onclick="handleGoogleAuth('register')" id="google-reg-btn">
-              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
-                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-                <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.347 2.825.957 4.039l3.007-2.332z"/>
-                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
-              </svg>
-              <span>Google registration (demo only)</span>
-            </button>
-
-            <div class="auth-divider">OR REGISTER WITH FORM</div>
+            <div class="auth-divider">REGISTER WITH FORM</div>
 
             <div class="auth-field">
               <label><i class="fas fa-user" style="margin-right:4px;color:#64748b;"></i> Full Name (with Title)</label>
@@ -305,7 +260,7 @@
             </div>
             <div class="auth-field">
               <label><i class="fas fa-envelope" style="margin-right:4px;color:#64748b;"></i> Official Email Address</label>
-              <input type="email" id="reg-email" placeholder="e.g. abebe.kebede@aau.edu.et">
+              <input type="email" id="reg-email" placeholder="name@institution.org">
             </div>
             <div class="auth-field">
               <label><i class="fas fa-phone" style="margin-right:4px;color:#64748b;"></i> Telephone (Optional)</label>
@@ -442,19 +397,19 @@
         </a>
         <a class="nav-item" data-view="settings">
           <i class="fas fa-cog"></i>
-          <span>Settings & Demo Data</span>
+          <span>Settings</span>
         </a>
       </nav>
 
       <div class="sidebar-footer" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;">
         <div style="display:flex;align-items:center;gap:10px;overflow:hidden;">
           <div class="user-avatar-wrap">
-            <div class="user-avatar" id="sidebar-user-avatar">DW</div>
+            <div class="user-avatar" id="sidebar-user-avatar">U</div>
             <span class="user-status-dot"></span>
           </div>
           <div class="user-info" style="overflow:hidden;">
-            <div class="user-name" id="sidebar-user-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Dr. Daniel Worku</div>
-            <span class="user-role-badge" id="sidebar-user-role">Chairperson</span>
+            <div class="user-name" id="sidebar-user-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Account</div>
+            <span class="user-role-badge" id="sidebar-user-role">Not signed in</span>
           </div>
         </div>
         <button class="action-icon-btn" title="Sign Out" onclick="handleLogout()" style="color:#ef4444;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);width:32px;height:32px;border-radius:8px;cursor:pointer;flex-shrink:0;" aria-label="Sign Out">
