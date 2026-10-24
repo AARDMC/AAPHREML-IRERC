@@ -1,40 +1,53 @@
-# GitHub and Google Integration
+# GitHub Pages + Google Apps Script Deployment Guide
 
-GitHub stores and reviews the application source. Google Apps Script runs the current portal, Google Sheets stores application metadata, and a restricted Google Drive folder stores uploaded documents. The repository includes no Google credentials, Apps Script project ID, or deployment ID. The owner-provided database, scanner, and Drive folder IDs are configured in `server/Config.gs`; access by the Apps Script execution account has not been verified.
+This project keeps application source in GitHub, publishes the frontend with GitHub Pages, and runs the backend in Google Apps Script. The deployment builds one Apps Script source file named Code.gs plus the required appsscript.json manifest. Do not edit the generated bundle directly.
 
-## Current architecture
+## Before deployment
 
-The current UI is served by Apps Script HtmlService and calls backend functions with `google.script.run`. The source remains modular across `Code.gs`, `server/`, `Index.html`, `client/`, and `styles/`.
+The IDs below are already set in server/Config.gs from the links supplied by the owner:
 
-This repository does not yet publish the live UI through GitHub Pages and does not yet build a single `Code.gs` for Apps Script. The current `.github/workflows/deploy-irerc.yml` pushes the modular project tree to Apps Script. Keep that workflow from production use until it is changed to match the approved hosting design.
+- CFG.DB_SS_ID: application database spreadsheet
+- CFG.SHEET_ID: scanner spreadsheet
+- CFG.FOLDER_ID: Drive folder for protocol documents
 
-A GitHub Pages page cannot use `google.script.run` directly. A separate API bridge or a UI hosted inside Apps Script is needed before Pages can be the live frontend.
+The Apps Script account that deploys the web app must be able to edit both spreadsheets and the Drive folder. Confirm ownership and policies with the institution. Do not commit credentials, signature images, or research records.
 
-## Google resource setup
+## Create the Apps Script project and first deployment
 
-An authorized institutional owner should:
+1. Clone this repository and install Node.js 22, npm, and Google clasp. Enable the Apps Script API for the Google account that will own/deploy the project.
+2. Authenticate clasp as that institutional account with clasp login.
+3. Build the Apps Script bundle: node scripts/build-gas.js. It creates .gas-build/Code.gs, .gas-build/appsscript.json, and an ignore file that excludes other source files.
+4. Create the standalone Apps Script project from the generated folder:
 
-1. Create an Apps Script web-app project and enable the Apps Script API for the deploying account.
-2. Use the supplied Drive folder for protocol documents; its ID is preconfigured as `CFG.FOLDER_ID` in `server/Config.gs`.
-3. The database and scanner spreadsheet IDs from the owner-provided URLs are preconfigured as `CFG.DB_SS_ID` and `CFG.SHEET_ID`. Confirm that the Apps Script execution account can access both spreadsheets and has Editor access to the Drive folder before deployment. Keep IDs out of public source where institutional policy requires it.
-4. Authenticate clasp with an institution-authorized account. Keep the project ID in a local `.clasp.json` or a protected GitHub environment variable.
-5. Run `initDatabase_()` in Apps Script and authorize the requested services.
-6. Set `INITIAL_ADMIN_EMAIL` and a unique `INITIAL_ADMIN_PASSWORD` of at least 12 characters in Script Properties. Run `bootstrapAdministrator_()` once; the temporary properties are removed after success.
-7. Store the official signature in restricted Drive and configure `SIGNATURE_FILE_ID` in Script Properties. Never commit the image to Git.
-8. Create the first web-app deployment manually and confirm its access policy before connecting institutional records.
+       cd .gas-build
+       clasp create --type standalone --title "AAPHREML-IRERC"
+       clasp push
 
-Use a separate, non-production set of Google resources during setup. Do not use the portal with live records until ownership, permissions, backup, and retention policies have been confirmed.
+   The resulting .gas-build/.clasp.json contains the script ID. Keep this file private.
+5. Open the new project in the Apps Script editor. Run initDatabase_() once and approve the requested Google services. Confirm the expected tabs are created in the database and scanner spreadsheets.
+6. In Project Settings → Script Properties, set INITIAL_ADMIN_EMAIL and a unique INITIAL_ADMIN_PASSWORD (at least 12 characters). Run bootstrapAdministrator_() once from the editor. On success, both temporary properties are removed. Never place the password in GitHub.
+7. Upload the official signature to restricted Drive storage and set SIGNATURE_FILE_ID as a Script Property if the workflow requires it.
+8. Create the first web-app deployment in the Apps Script editor or with clasp deploy --description "Initial IRERC backend". Select Execute as: Me and the approved institutional access policy. Copy the deployment ID from the deployment details. The workflow updates this existing deployment on future commits.
 
-## GitHub Actions
+## Configure GitHub Actions and publish
 
-The optional workflow requires a protected `irerc-production` environment with:
+1. In GitHub, open Settings → Environments and create irerc-production.
+2. Add environment variable IRERC_SCRIPT_ID using the Apps Script project ID, and IRERC_DEPLOYMENT_ID using the deployment ID from the previous step.
+3. Add environment secret CLASPRC_JSON with the complete authorized account's clasp credential JSON. Obtain it from the account's local clasp credential file. Treat it as a password; do not paste it into chat, commits, or logs. Restrict who can change the environment.
+4. Ensure the repository can use GitHub Pages with GitHub Actions as the build/deployment source. On merge, the Deploy AAPHREML-IRERC workflow builds and pushes the Apps Script bundle, updates its web-app deployment, builds the Pages frontend with the backend URL, then publishes Pages.
+5. When the workflow succeeds, open [the portal](https://aardmc.github.io/AAPHREML-IRERC/) and verify sign-in. Check Actions logs if either deployment job fails.
 
-- Secret `CLASPRC_JSON`: clasp credentials for the authorized account
-- Variable `IRERC_SCRIPT_ID`: Apps Script project ID
-- Variable `IRERC_DEPLOYMENT_ID`: existing web-app deployment ID
+The workflow is .github/workflows/deploy-irerc.yml. Pull requests run source/preview validation only; they do not deploy production. Production deployment occurs on a qualifying push to main or a manual workflow dispatch.
 
-The workflow does not create the Apps Script project, first deployment, or Google resources. Require review before production deployment. Do not commit credentials.
+## What is deployed
 
-## Preview
+- GitHub Pages serves the frontend; the Apps Script web app serves only the backend bridge (and a small link page at its root).
+- The bridge accepts messages only from the configured https://aardmc.github.io origin and exposes the defined api* endpoints except database initialization.
+- apiInitDatabase is not exposed to the public bridge. Initialization and first-administrator setup are performed only from the Apps Script editor by an authorized owner.
+- The web app runs as the deploying account. Anonymous entry allows the bridge to load without a Google login; application APIs still require portal sessions and role checks.
 
-`preview.html` is a compiled layout preview. It has no sample accounts or protocol records and does not connect to Apps Script, Sheets, or Drive. The public logo may be included; the official signature stays in restricted Drive storage.
+Apps Script's ALLOWALL frame setting is required for the cross-origin bridge. This allows framing at the browser level, so the bridge also validates the configured Pages origin and only accepts a fixed list of API names. See Google's [HtmlService XFrameOptionsMode reference](https://developers.google.com/apps-script/reference/html/x-frame-options-mode) and [HTML service client-to-server communication guide](https://developers.google.com/apps-script/guides/html/communication).
+
+## Updating the portal
+
+Make changes in GitHub source files, review the pull request and CI checks, then merge to main. The workflow regenerates the Apps Script bundle; only Code.gs and appsscript.json are pushed to Apps Script. The UI and modular source remain in GitHub. Review the Actions run for both backend and Pages deployment completion.

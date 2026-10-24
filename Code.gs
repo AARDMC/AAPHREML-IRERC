@@ -23,9 +23,6 @@ function doGet(e) {
   return HtmlService.createHtmlOutput(page).setTitle('AAPHREML-IRERC');
 }
 
-
-}
-
 /**
  * Template include_ helper to modularize CSS and HTML client scripts.
  * Example in Index.html: <?!= include_('styles/styles') ?>

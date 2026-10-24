@@ -1,74 +1,39 @@
 # Project Manifest
 
-## AAPHREML-IRERC Research Protocol Ethics Review System
+## AAPHREML-IRERC Research Ethics Portal
 
-### Identity
+### Hosting
 
-| Field | Value |
-|---|---|
-| Project | AAPHREML-IRERC Research Protocol Management & Ethics Review System |
-| Organization | Addis Ababa City Administration Health Bureau |
-| Committee | Institutional Research Ethics Review Committee (IRERC) |
-| Country | Federal Democratic Republic of Ethiopia |
-| Status | Source prepared; owner setup and production deployment are not confirmed |
-
-### Purpose
-
-The portal manages protocol submission, administrative screening, ethical review, committee decisions, clearance, and post-clearance monitoring. It defines investigator, reviewer, secretariat, vice-chairperson, chairperson, and administrator roles.
+- **Frontend:** GitHub Pages at https://aardmc.github.io/AAPHREML-IRERC/
+- **Backend:** Google Apps Script web app
+- **Source of truth:** This GitHub repository
+- **Apps Script payload:** generated Code.gs plus required appsscript.json manifest
+- **Bridge:** Apps Script HtmlService iframe with an origin-checked postMessage protocol
+- **Data:** Google Sheets and restricted Google Drive
 
 ### Source map
 
 | Path | Purpose |
 |---|---|
-| `Code.gs` | Apps Script entry point and public API wrappers |
-| `server/` | Configuration, database access, token sessions, authorization, scanner, and business services |
-| `Index.html` | Main HtmlService page |
-| `client/app.html` | Application state, navigation, authentication handlers, and Apps Script RPC bridge |
-| `client/views.html` | Portal views and interactions |
-| `styles/styles.html` | Application styling |
-| `appsscript.json` | Apps Script runtime and web-app manifest |
-| `preview.html` | Compiled interface preview with no backend connection or simulated records |
-| `build_preview.ps1` | Rebuilds the interface preview |
+| Code.gs, server/*.gs | Modular Apps Script source and API wrappers |
+| server/Bridge.html | Backend RPC bridge template embedded into generated Code.gs |
+| Index.html, client/, styles/ | Frontend source compiled for Pages |
+| scripts/build-gas.js | Builds the single-file Apps Script payload |
+| scripts/build-pages.js | Builds the GitHub Pages frontend with the configured backend URL |
+| scripts/build-preview.js | Produces the disconnected local preview |
+| appsscript.json | Required Apps Script manifest |
+| .github/workflows/deploy-irerc.yml | Production deploy workflow |
 
 ### Google resources
 
-The owner-provided database, scanner, and Drive folder IDs are configured. Access from the Apps Script execution account has not been verified.
+server/Config.gs contains the user-provided application spreadsheet ID, scanner spreadsheet ID, and Drive folder ID. Permissions must be verified by the institutional Apps Script deploying account; IDs do not grant access. Signature assets remain in restricted Drive storage.
 
-| Setting | Purpose |
-|---|---|
-| `CFG.DB_SS_ID` | Primary Google Sheets database | User-provided spreadsheet ID configured; access not verified |
-| `CFG.SHEET_ID` | Scanner output spreadsheet | User-provided spreadsheet ID configured; access not verified |
-| `CFG.FOLDER_ID` | Restricted Drive document folder | User-provided folder ID configured; access not verified |
-| `SIGNATURE_FILE_ID` Script Property | Restricted chairperson signature image |
+### Deployment requirements
 
-The signature image must remain in restricted Drive storage and must not be committed to Git.
+The GitHub Actions environment irerc-production requires secret CLASPRC_JSON and variables IRERC_SCRIPT_ID and IRERC_DEPLOYMENT_ID. The workflow updates an already-created Apps Script web-app deployment, then publishes Pages. The first project, first deployment, database initialization, and initial administrator are set up once by an authorized owner.
 
 ### Authentication and data handling
 
-The portal uses server-issued, expiring session tokens and role-based authorization. Password hashes use salted SHA-256; this is not a slow password KDF and remains a security limitation. No seeded accounts, default password, demo seeder, or mock API is included.
+No default administrator, seeded users, demo protocols, mock API, or sample records are included. The portal uses expiring server-issued session tokens and role checks. Password hashes use salted SHA-256, not a slow password KDF; this is a known limitation. Cleaning source code does not delete data that may already exist in Google Sheets or Drive.
 
-Removing demo code does not delete test records that may already exist in Google Sheets or Drive. An authorized data owner must review and remove any confirmed test records separately.
-
-### Current deployment boundary
-
-The repository currently contains modular Apps Script and HtmlService source. The current workflow pushes the modular source tree. It has not been converted to a single generated `Code.gs` deployment or a live GitHub Pages frontend. GitHub Pages cannot call Apps Script `google.script.run` directly; that hosting design needs a separate bridge or a UI served inside Apps Script.
-
-Do not configure or trigger production deployment until the workflow and runtime have been converted to the approved target architecture.
-
-### Owner setup
-
-1. Use the provided database and scanner spreadsheets and restricted Drive folder with an institution-owned Apps Script project.
-2. Confirm the IDs in `server/Config.gs` and verify that the executing account can access the spreadsheets and has Editor access to the Drive folder.
-3. Run database initialization and bootstrap the first administrator through temporary Script Properties.
-4. Create the first web-app deployment manually.
-5. Test with non-production resources and confirm access, backup, and retention policies before handling records.
-
-### Repository contents
-
-- `CONFIGURATION_AND_USER_MANUAL.md`: setup and operating instructions
-- `GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md`: current integration boundaries
-- `docs/ARCHITECTURE.md`: system design
-- `docs/CHANGE_LOG.md`: cleanup record
-- `.github/workflows/deploy-irerc.yml`: existing optional deployment workflow
-
-*Addis Ababa City Administration Health Bureau — AAPHREML-IRERC*
+See the [deployment guide](GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md), [operations manual](CONFIGURATION_AND_USER_MANUAL.md), [architecture](docs/ARCHITECTURE.md), and [change log](docs/CHANGE_LOG.md).
