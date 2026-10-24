@@ -150,20 +150,16 @@ Open [`server/Config.gs`](server/Config.gs) to configure your institutional Goog
    };
    ```
 
-### Step 4.2: Create Google Drive Vault Folder
-1. In Google Drive, create a folder named `AAPHREML_IRERC_Documents`.
-2. Copy its ID from the URL and set it as `CFG.FOLDER_ID` in `server/Config.gs`:
-   ```javascript
-   FOLDER_ID: 'YOUR_INSTITUTIONAL_DRIVE_FOLDER_ID',
-   ```
+### Step 4.2: Configure Google Drive Vault Folder
+The Drive folder supplied for this integration is preconfigured as `CFG.FOLDER_ID` in `server/Config.gs`. The application creates protocol-specific subfolders there. Ensure the Apps Script execution account has Editor access to that folder, and keep its Drive sharing restricted to approved staff.
 
-Create a separate institution-owned spreadsheet for scanner output and set its ID in `CFG.SHEET_ID`. All resource IDs are blank in the repository. The database code fails closed until `CFG.DB_SS_ID` is configured; it will not select an active spreadsheet or create a database automatically.
+Create a separate institution-owned spreadsheet for scanner output and set its ID in `CFG.SHEET_ID`. The primary database spreadsheet ID `CFG.DB_SS_ID` remains blank until an authorized owner configures it. Database operations fail closed until that ID is set; the code will not select an active spreadsheet or create a database automatically.
 
 ### Step 4.3: Initialize Tables & System Admin
 1. In the Apps Script editor, run **`initDatabase_`** and grant the requested permissions.
 2. In **Project Settings → Script Properties**, temporarily add `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD`. Use an organization-controlled email and a unique password of at least 12 characters.
 3. Run **`bootstrapAdministrator_`** once. It creates the administrator and deletes both temporary properties. There is no default administrator password.
-4. Sign in with the new account. Do not use `seedDemoData_` with production records.
+4. Sign in with the new account. Initialization creates empty schema tables; the demo data seeder is not included.
 
 ### Step 4.4: Deploy Web Application
 1. Click **Deploy** > **New deployment**.
@@ -186,13 +182,13 @@ Before using any live records, confirm the spreadsheet and Drive IDs in `server/
 |---|---|---|
 | `CFG.DB_SS_ID` | Primary Google Sheets database ID | Blank; set an owner-approved ID |
 | `CFG.SHEET_ID` | Scanner output spreadsheet ID | Blank; set an owner-approved ID |
-| `CFG.FOLDER_ID` | Google Drive document vault folder ID | Blank; set an owner-approved ID |
+| `CFG.FOLDER_ID` | Google Drive document vault folder ID | Provided folder ID configured; access not verified |
 | `CFG.PROTOCOL_ID_PREFIX` | Protocol code prefix | `AAPHREML-IRERC` |
 | `CFG.ETHICS_QUORUM` | Minimum approvals for quorum | `2` |
 | `CFG.REVIEW_DEADLINE_DAYS` | Working days for reviewer deadline | `7` |
 | `CFG.MAX_FILE_SIZE_MB` | Maximum upload file size | `25` |
 
-> Do not configure these values with production IDs until the institution has confirmed resource ownership, permissions, and the intended deployment environment.
+> Before using live records, confirm the database and scanner spreadsheet IDs, the Drive folder ownership and permissions, and the intended deployment environment.
 
 ---
 
