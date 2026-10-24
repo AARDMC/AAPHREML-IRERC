@@ -415,15 +415,8 @@ function initDatabase_() {
     getTableSheet_(tbl);
   }
 
-  // Clean default 'Sheet1' if present and empty
-  var defaultSheet = ss.getSheetByName('Sheet1');
-  if (defaultSheet && ss.getSheets().length > 1) {
-    try {
-      ss.deleteSheet(defaultSheet);
-    } catch (e) {
-      // Ignored if cannot delete
-    }
-  }
+  // Preserve any pre-existing default sheet. Initialization only adds the
+  // application tables and must not delete user-managed spreadsheet tabs.
 
   Logger.log('Database initialized successfully with ' + tableNames.length + ' tables.');
   return { success: true, tableCount: tableNames.length };
