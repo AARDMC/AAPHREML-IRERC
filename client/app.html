@@ -453,37 +453,77 @@ function handleLogin(directEmail, directPassword) {
 }
 
 /**
+ * Load the protected portal screens only after authentication succeeds.
+ */
+function ensurePortalViewsLoaded_() {
+  if (typeof renderDashboardView === 'function') return Promise.resolve();
+  if (window.__IRERC_VIEWS_PROMISE) return window.__IRERC_VIEWS_PROMISE;
+
+  window.__IRERC_VIEWS_PROMISE = new Promise(function(resolve, reject) {
+    var script = document.createElement('script');
+    script.src = new URL('./views.js', document.baseURI).href;
+    script.async = true;
+    script.onload = function() {
+      if (typeof renderDashboardView === 'function') resolve();
+      else reject(new Error('The portal screens did not initialize.'));
+    };
+    script.onerror = function() {
+      window.__IRERC_VIEWS_PROMISE = null;
+      reject(new Error('The portal screens could not load. Check your connection and try again.'));
+    };
+    document.head.appendChild(script);
+  });
+
+  return window.__IRERC_VIEWS_PROMISE;
+}
+
+/**
  * Complete Sign In and Transition to Main Portal
  */
 function completeSignIn(user) {
-  AppState.currentUser = user;
+  return ensurePortalViewsLoaded_().then(function() {
+    AppState.currentUser = user;
 
-  var authScreen = document.getElementById('auth-screen');
-  var appLayout = document.getElementById('app-layout');
-  if (authScreen) authScreen.style.display = 'none';
-  if (appLayout) appLayout.style.display = 'flex';
+    var authScreen = document.getElementById('auth-screen');
+    var appLayout = document.getElementById('app-layout');
+    if (authScreen) authScreen.style.display = 'none';
+    if (appLayout) appLayout.style.display = 'flex';
 
-  var nameEl = document.getElementById('topbar-user-name');
-  if (nameEl) nameEl.textContent = user.full_name;
-  var roleEl = document.getElementById('topbar-user-role');
-  if (roleEl) roleEl.textContent = user.role;
-  var footerName = document.getElementById('sidebar-user-name');
-  if (footerName) footerName.textContent = user.full_name;
-  var footerRole = document.getElementById('sidebar-user-role');
-  if (footerRole) footerRole.textContent = user.role;
-  var avatarEl = document.getElementById('sidebar-user-avatar');
-  if (avatarEl) {
-    var parts = user.full_name.split(' ');
-    var initials = (parts[0] ? parts[0][0] : 'U') + (parts.length > 1 ? parts[parts.length-1][0] : 'S');
-    avatarEl.textContent = initials.toUpperCase();
-  }
+    var nameEl = document.getElementById('topbar-user-name');
+    if (nameEl) nameEl.textContent = user.full_name;
+    var roleEl = document.getElementById('topbar-user-role');
+    if (roleEl) roleEl.textContent = user.role;
+    var footerName = document.getElementById('sidebar-user-name');
+    if (footerName) footerName.textContent = user.full_name;
+    var footerRole = document.getElementById('sidebar-user-role');
+    if (footerRole) footerRole.textContent = user.role;
+    var avatarEl = document.getElementById('sidebar-user-avatar');
+    if (avatarEl) {
+      var parts = user.full_name.split(' ');
+      var initials = (parts[0] ? parts[0][0] : 'U') + (parts.length > 1 ? parts[parts.length-1][0] : 'S');
+      avatarEl.textContent = initials.toUpperCase();
+    }
 
-  if (typeof applyRoleBasedNav === 'function') {
-    applyRoleBasedNav(user.role);
-  }
+    if (typeof applyRoleBasedNav === 'function') {
+      applyRoleBasedNav(user.role);
+    }
 
-  showToast('Authenticated as ' + user.full_name + ' (' + user.role + ')', 'success');
-  navigateTo('dashboard');
+    showToast('Authenticated as ' + user.full_name + ' (' + user.role + ')', 'success');
+    navigateTo('dashboard');
+  }).catch(function(error) {
+    var authScreen = document.getElementById('auth-screen');
+    var appLayout = document.getElementById('app-layout');
+    if (authScreen) authScreen.style.display = 'block';
+    if (appLayout) appLayout.style.display = 'none';
+
+    var errBox = document.getElementById('login-error');
+    if (errBox) {
+      errBox.querySelector('span').textContent = error && error.message
+        ? error.message
+        : 'The portal screens could not load. Please try again.';
+      errBox.style.display = 'block';
+    }
+  });
 }
 
 /**
@@ -668,14 +708,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // 6. Check Active User Session or Load Landing Page
   callBackend('apiGetSessionUser', [], function(u) {
     if (u && u.user_id) {
-      completeSignIn(u);
-      var hash = window.location.hash.substring(1);
-      if (hash) {
-        var parts = hash.split('/');
+      var initialHash = window.location.hash.substring(1);
+      completeSignIn(u).then(function() {
+        if (!AppState.currentUser || !initialHash) return;
+        var parts = initialHash.split('/');
         navigateTo(parts[0], parts[1]);
-      } else {
-        navigateTo('dashboard');
-      }
+      });
     } else {
       // In local preview/test environment, show landing auth screen
       var authScreen = document.getElementById('auth-screen');
