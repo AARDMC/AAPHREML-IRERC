@@ -9,7 +9,7 @@
 
 ## Table of Contents
 1. [Architecture & Overview](#1-architecture--overview)
-2. [Quick Start: Testing the Offline Standalone Demo](#2-quick-start-testing-the-offline-standalone-demo)
+2. [Local Interface Preview](#2-local-interface-preview)
 3. [Production Deployment to Google Apps Script](#3-production-deployment-to-google-apps-script)
 4. [Database & Google Drive Configuration](#4-database--google-drive-configuration)
 5. [User Sign-Up & Account Provisioning Guide](#5-user-sign-up--account-provisioning-guide)
@@ -33,7 +33,7 @@ The **AAPHREML-IRERC** platform is an institutional research ethics governance s
 
 The application is architected with a dual deployment model:
 - **Serverless Production Engine:** Runs natively inside **Google Apps Script (GAS)**, backed by **Google Sheets** as a relational database and **Google Drive** as a document repository.
-- **Standalone Demo (`preview.html`):** A compiled single-file client with mock data for evaluation and training. It is not connected to the live backend and should not contain real records or credentials. The page needs no app server; external font and icon CDNs may require internet access.
+- **Local Interface Preview (`preview.html`):** A compiled layout preview with no sample accounts or protocol records. It is disconnected from Apps Script, Sheets, and Drive.
 
 > **Deployment status:** The source is integrated, but this repository does not include an authorized Apps Script project, deployment URL, or Google credentials. Production becomes live only after the institution completes the owner-authorized setup below.
 
@@ -43,7 +43,7 @@ AAPHREML-IRERC/
 ├── Code.gs                   # GAS main entrypoint, doGet, and API dispatcher
 ├── Index.html                # Main container HTML with authentication screen
 ├── appsscript.json           # Manifest configuration with OAuth scopes
-├── preview.html              # Standalone compiled offline bundle (single file)
+├── preview.html              # Compiled layout preview; no backend or sample records
 ├── build_preview.ps1         # Automated compiler script to assemble preview.html
 ├── Logo File.png             # Addis Ababa City Administration Health Bureau logo
 ├── Certeficate of Clearance Letter.docx  # Historical reference document
@@ -51,7 +51,7 @@ AAPHREML-IRERC/
 ├── CONFIGURATION_AND_USER_MANUAL.md      # This file
 ├── GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md
 ├── client/
-│   ├── app.html              # State store, hash router, auth handlers, mock bridge
+│   ├── app.html              # State store, hash router, auth handlers, Apps Script bridge
 │   └── views.html            # 16 dynamic views, dashboards, modals, & tables
 ├── server/
 │   ├── Config.gs             # Institutional configuration, sheet IDs, drive folder IDs
@@ -75,7 +75,6 @@ AAPHREML-IRERC/
 │   ├── Dashboard.gs          # Dashboard metrics and pending actions
 │   ├── DataCollection.gs     # Post-clearance study monitoring
 │   ├── Submission.gs         # Investigator submission and edit workflows
-│   ├── SeedData.gs           # Demonstration data loader with 20 Ethiopian protocols
 │   └── Utils.gs              # Shared utility functions
 ├── styles/
 │   └── styles.html           # Enterprise design system, CSS variables, responsive CSS
@@ -89,23 +88,9 @@ The public logo is embedded from `server/Assets.gs`; the official signature imag
 
 ---
 
-## 2. Quick Start: Testing the Offline Standalone Demo
+## 2. Local Interface Preview
 
-To test or demo the platform immediately on Windows, macOS, or Linux:
-
-1. Double-click or open [`preview.html`](preview.html) in any modern browser (Google Chrome, Microsoft Edge, Mozilla Firefox, or Safari).
-2. The **Institutional Research Ethics Review Portal** landing page will appear with branding and authentication tabs.
-3. **One-Click Role Testing:** Use the 6 direct access buttons on the Sign In panel to test the interface from any user perspective:
-   - **Chairperson:** Full executive docket review, meeting determination, and clearance authorization.
-   - **Vice Chairperson:** Secondary oversight and meeting assessment.
-   - **Secretary (Ato Solomon):** Screening intake, administrative completeness checks, and reviewer assignments.
-   - **Reviewer (Dr. Hanna):** "My Reviews", independent ethical assessment forms, and COI verification.
-   - **Investigator (Dr. Dereje):** Submission wizard, "My Protocols", and correction tracking.
-   - **Administrator:** Complete access to all 16 views, system audit logs, and settings.
-4. **Responsive Drawer Navigation:** On mobile screens or tablets, tap the hamburger menu icon (`☰`) at top left to open the slide-out navigation drawer; tap anywhere on the dark backdrop to close it.
-
----
-
+`preview.html` is compiled from the interface source for layout inspection. It contains no sample accounts or protocol records and has no connection to Apps Script, Sheets, or Drive. Authentication and data workflows work only from the deployed Apps Script application.
 ## 3. Production Deployment to Google Apps Script
 
 To deploy this platform as a live institutional web application on Google Workspace:
@@ -180,10 +165,7 @@ Create a separate institution-owned spreadsheet for scanner output and set its I
 3. Run **`bootstrapAdministrator_`** once. It creates the administrator and deletes both temporary properties. There is no default administrator password.
 4. Sign in with the new account. Do not use `seedDemoData_` with production records.
 
-### Step 4.4: (Optional) Seed 20 Demonstration Protocols
-Only use a disposable test project and test spreadsheet. First set the Script Property `ALLOW_DEMO_DATA_SEEDING` to `true`, then sign in as an administrator and use **Seed Realistic Demo Data**. Remove the property immediately afterward. The seeder assigns random, undisclosed passwords to newly created demo users.
-
-### Step 4.5: Deploy Web Application
+### Step 4.4: Deploy Web Application
 1. Click **Deploy** > **New deployment**.
 2. Select type: **Web app**.
 3. Set configuration:
@@ -193,7 +175,7 @@ Only use a disposable test project and test spreadsheet. First set the Script Pr
 4. Click **Deploy** and copy the resulting **Web App URL**.
 5. Share this URL with investigators, committee members, and staff.
 
-### Step 4.6: Configure the official signature
+### Step 4.5: Configure the official signature
 Upload the approved signature image to a restricted Google Drive folder accessible to the deploying account. In Script Properties, set `SIGNATURE_FILE_ID` to that file's ID. The signature image is intentionally excluded from Git and from the public preview; it is returned only to authenticated administrators, secretariat staff, and the chairperson when the permission letter is opened.
 
 Before using any live records, confirm the spreadsheet and Drive IDs in `server/Config.gs` belong to the intended environment. Test a separate copy of those resources first.
@@ -314,9 +296,9 @@ Title · Abstract · Background · Problem Statement · Objectives · Literature
 
 ---
 
-## 9. Automated Build Utility (`build_preview.ps1`)
+## 9. Automated Interface Preview Build (`build_preview.ps1`)
 
-After editing any source file (`Index.html`, `styles/styles.html`, `client/app.html`, or `client/views.html`), recompile the standalone offline bundle by running:
+After editing any source file (`Index.html`, `styles/styles.html`, `client/app.html`, or `client/views.html`), recompile the compiled interface preview by running:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build_preview.ps1
@@ -337,8 +319,8 @@ The resulting `preview.html` is a standalone single file that runs without the A
 
 ## 10. Troubleshooting & FAQ
 
-### Q: Clicks in the offline preview don't respond.
-**A:** Ensure you are opening the latest compiled `preview.html`. The global event delegation handles `[data-view]` navigation, mobile drawer toggles, and modal dialogues automatically. Try a hard refresh (`Ctrl+Shift+R`).
+### Q: Why do data actions not work in the local preview?
+**A:** The local preview is for layout inspection only. Sign-in and data actions require the deployed Apps Script web-app URL.
 
 ### Q: How do I reset an administrator password?
 **A:** There is no self-service password reset. Contact the authorized application owner and follow the institution's controlled recovery procedure. Do not edit password hashes directly in Sheets.
@@ -358,8 +340,8 @@ All headers, clearance certificates, and email templates adapt automatically.
 ### Q: Why is my deployment not updating after a push?
 **A:** Check the **Actions** tab. Confirm the `irerc-production` environment has `CLASPRC_JSON`, `IRERC_SCRIPT_ID`, and `IRERC_DEPLOYMENT_ID` configured. The workflow updates an existing web-app deployment; it does not create a URL or a deployment for you.
 
-### Q: How do I reset the demo data?
-**A:** Use demo mode or a disposable test spreadsheet. Never seed demo records into the production database.
+### Q: Does source cleanup remove records already stored in Google Sheets or Drive?
+**A:** No. Removing seeding code prevents new sample records from being created; it does not erase existing records. An authorized data owner should review any test records in the configured spreadsheets and Drive folder, back up the data, then remove only records confirmed to be test data.
 
 ---
 
