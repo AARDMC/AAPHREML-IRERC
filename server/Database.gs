@@ -423,6 +423,13 @@ function initDatabase_() {
 }
 
 /**
+ * Owner-run setup entry point. Safe to rerun; it only adds missing tables.
+ */
+function initializeDatabase() {
+  return initDatabase_();
+}
+
+/**
  * Converts a table row array to an object using column schema.
  */
 function rowToObject_(cols, rowValues, rowNumber) {
