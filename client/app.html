@@ -13,24 +13,141 @@ var AppState = {
 };
 
 /**
- * Apps Script RPC API Caller with server-issued session tokens
+ * GitHub Pages to Apps Script RPC bridge.
+ * The hidden Apps Script iframe accepts calls only from the configured Pages origin.
  */
-function gas(fn) {
-  var args = Array.prototype.slice.call(arguments, 1);
+var _RPC_CHANNEL_ = 'aaphreml-irerc-rpc-v1';
+var _RPC_PENDING_ = Object.create(null);
+var _RPC_READY_WAITERS_ = [];
+var _RPC_BRIDGE_ORIGIN_ = '';
+var _RPC_REQUEST_SEQUENCE_ = 0;
+var _RPC_API_ALIASES_ = {
+  deleteFileFromDrive: 'apiDeleteFileFromDrive',
+  generateNextProtocolCode: 'apiGenerateNextProtocolCode',
+  loadForEdit: 'apiLoadForEdit',
+  processFormSubmission: 'apiProcessFormSubmission',
+  processUploadedFile: 'apiProcessUploadedFile'
+};
+
+function hasRpcBridge_() {
+  return !!(window.IRERC_CONFIG && window.IRERC_CONFIG.bridgeUrl);
+}
+
+function _isTrustedBridgeOrigin_(origin) {
+  try {
+    var url = new URL(origin);
+    return url.protocol === 'https:' &&
+      (url.hostname === 'script.google.com' ||
+       url.hostname === 'googleusercontent.com' ||
+       url.hostname.slice(-'.googleusercontent.com'.length) === '.googleusercontent.com');
+  } catch (e) {
+    return false;
+  }
+}
+
+function _getBridgeFrame_() {
+  if (!hasRpcBridge_()) throw new Error('The Apps Script backend URL is not configured for this page.');
+  var frame = document.getElementById('irerc-gas-bridge');
+  if (!frame) {
+    frame = document.createElement('iframe');
+    frame.id = 'irerc-gas-bridge';
+    frame.title = 'AAPHREML-IRERC backend connection';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.setAttribute('referrerpolicy', 'strict-origin');
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(frame);
+  }
+  if (frame.dataset.irercBridgeUrl !== window.IRERC_CONFIG.bridgeUrl) {
+    frame.dataset.irercBridgeUrl = window.IRERC_CONFIG.bridgeUrl;
+    frame.src = window.IRERC_CONFIG.bridgeUrl;
+  }
+  return frame;
+}
+
+window.addEventListener('message', function(event) {
+  var frame = document.getElementById('irerc-gas-bridge');
+  if (!frame || event.source !== frame.contentWindow || !_isTrustedBridgeOrigin_(event.origin)) return;
+  var message = event.data;
+  if (!message || message.channel !== _RPC_CHANNEL_) return;
+
+  if (message.type === 'ready') {
+    _RPC_BRIDGE_ORIGIN_ = event.origin;
+    var waiters = _RPC_READY_WAITERS_.splice(0);
+    waiters.forEach(function(waiter) {
+      clearTimeout(waiter.timer);
+      waiter.resolve(frame);
+    });
+    return;
+  }
+
+  var pending = _RPC_PENDING_[message.id];
+  if (!pending) return;
+  delete _RPC_PENDING_[message.id];
+  clearTimeout(pending.timer);
+  if (message.type === 'result') pending.resolve(message.result);
+  else pending.reject(new Error(message.error || 'Apps Script request failed.'));
+});
+
+function _waitForBridge_() {
   return new Promise(function(resolve, reject) {
-    if (typeof google === 'undefined' || !google.script || !google.script.run) {
-      reject(new Error('Open the deployed Apps Script portal to use this service.'));
+    var frame;
+    try {
+      frame = _getBridgeFrame_();
+    } catch (e) {
+      reject(e);
       return;
     }
-    var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-    if (typeof runner[fn] !== 'function') {
-      reject(new Error('Function ' + fn + ' not found in Apps Script backend.'));
+    if (_RPC_BRIDGE_ORIGIN_) {
+      resolve(frame);
       return;
     }
-    args.push(getSessionToken_());
-    runner[fn].apply(runner, args);
+    var waiter = { resolve: resolve, reject: reject, timer: null };
+    waiter.timer = setTimeout(function() {
+      var index = _RPC_READY_WAITERS_.indexOf(waiter);
+      if (index >= 0) _RPC_READY_WAITERS_.splice(index, 1);
+      reject(new Error('Could not connect to the Apps Script backend. Check the web-app deployment and access settings.'));
+    }, 30000);
+    _RPC_READY_WAITERS_.push(waiter);
   });
 }
+
+function _callRpc_(functionName, args) {
+  return _waitForBridge_().then(function(frame) {
+    return new Promise(function(resolve, reject) {
+      var requestId = 'irerc_' + Date.now() + '_' + (++_RPC_REQUEST_SEQUENCE_);
+      var pending = {
+        resolve: resolve,
+        reject: reject,
+        timer: setTimeout(function() {
+          delete _RPC_PENDING_[requestId];
+          reject(new Error('The Apps Script backend request timed out.'));
+        }, 120000)
+      };
+      _RPC_PENDING_[requestId] = pending;
+      try {
+        frame.contentWindow.postMessage({
+          channel: _RPC_CHANNEL_,
+          type: 'call',
+          id: requestId,
+          functionName: functionName,
+          args: args || []
+        }, _RPC_BRIDGE_ORIGIN_);
+      } catch (e) {
+        clearTimeout(pending.timer);
+        delete _RPC_PENDING_[requestId];
+        reject(e);
+      }
+    });
+  });
+}
+
+function gas(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  var target = _RPC_API_ALIASES_[fn] || fn;
+  args.push(getSessionToken_());
+  return _callRpc_(target, args);
+}
+
 
 function getSessionToken_() {
   try {
@@ -61,42 +178,33 @@ function errMsg(e) {
 }
 
 function callBackend(funcName, args, callback, errorCallback) {
-  showLoader(true);
-
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-    var runner = google.script.run
-      .withSuccessHandler(function(response) {
-        showLoader(false);
-        if (response && response.success === false) {
-          showToast(response.error || 'Server error', 'danger');
-          if (errorCallback) errorCallback(response.error);
-        } else {
-          var payload = (response && response.data !== undefined) ? response.data : response;
-          if (callback) callback(payload);
-        }
-      })
-      .withFailureHandler(function(err) {
-        showLoader(false);
-        showToast(err.message || 'Execution failed', 'danger');
-        if (errorCallback) errorCallback(err);
-      });
-
-    // Invoke dynamic function name
-    if (typeof runner[funcName] === 'function') {
-      var requestArgs = (args || []).slice();
-      requestArgs.push(getSessionToken_());
-      runner[funcName].apply(runner, requestArgs);
-    } else {
-      showLoader(false);
-      showToast('API endpoint not found: ' + funcName, 'danger');
-    }
-  } else {
-    showLoader(false);
-    var message = 'Open the deployed Apps Script portal to sign in and use the application.';
-    showToast(message, 'warning');
-    if (errorCallback) errorCallback(message);
+  if (!hasRpcBridge_()) {
+    var unavailable = 'Open the deployed GitHub Pages portal to use the application.';
+    showToast(unavailable, 'warning');
+    if (errorCallback) errorCallback(unavailable);
+    return;
   }
+
+  showLoader(true);
+  var requestArgs = (args || []).slice();
+  requestArgs.push(getSessionToken_());
+
+  _callRpc_(funcName, requestArgs).then(function(response) {
+    showLoader(false);
+    if (response && response.success === false) {
+      showToast(response.error || 'Server error', 'danger');
+      if (errorCallback) errorCallback(response.error);
+      return;
+    }
+    var payload = (response && response.data !== undefined) ? response.data : response;
+    if (callback) callback(payload);
+  }).catch(function(err) {
+    showLoader(false);
+    showToast(err && err.message ? err.message : 'Execution failed', 'danger');
+    if (errorCallback) errorCallback(err);
+  });
 }
+
 
 
 /**

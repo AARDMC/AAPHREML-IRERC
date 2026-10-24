@@ -7,15 +7,23 @@
  * Serves the Web Application user interface.
  */
 function doGet(e) {
-  var template = HtmlService.createTemplateFromFile('Index');
-  template.appName = (typeof CFG !== 'undefined' && CFG.APP_NAME) || 'AAPHREML-IRERC';
-  template.orgName = (typeof CFG !== 'undefined' && CFG.ORG_NAME) || 'Addis Ababa City Administration Health Bureau';
-  template.committeeName = (typeof CFG !== 'undefined' && CFG.COMMITTEE_NAME) || 'Institutional Research Ethics Review Committee (IRERC)';
-  template.logoDataUri = PORTAL_LOGO_DATA_URI_;
-  return template.evaluate()
-    .setTitle(template.appName)
-    .setFaviconUrl('https://img.icons8.com/color/48/caduceus.png')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  var parameters = e && e.parameter ? e.parameter : {};
+  if (String(parameters.bridge || '') === '1') {
+    return HtmlService.createHtmlOutput(BRIDGE_HTML_)
+      .setTitle('AAPHREML-IRERC Backend Bridge')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
+  var portalUrl = 'https://aardmc.github.io/AAPHREML-IRERC/';
+  var page = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AAPHREML-IRERC</title></head>' +
+    '<body style="font:16px Arial,sans-serif;padding:3rem;max-width:50rem;margin:auto">' +
+    '<h1>AAPHREML-IRERC</h1><p>Open the institutional portal to sign in.</p>' +
+    '<p><a href="' + portalUrl + '">Open the IRERC portal</a></p></body></html>';
+  return HtmlService.createHtmlOutput(page).setTitle('AAPHREML-IRERC');
+}
+
+
 }
 
 /**

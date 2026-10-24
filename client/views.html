@@ -3548,7 +3548,7 @@ function submitAddMember() {
 
 // --- Facility Access Permission Letter Modal ---
 function sendDecisionEmail(protocolId, decisionId) {
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
+  if (hasRpcBridge_()) {
     callBackend('apiGetChairSignature', [], function(asset) {
       renderDecisionEmailModal(protocolId, decisionId, asset && asset.data_uri ? asset.data_uri : '');
     });
