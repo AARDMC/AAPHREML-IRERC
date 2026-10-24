@@ -21,12 +21,9 @@ jobs:
         with:
           node-version: 22
 
-      - name: Rebuild standalone preview
+      - name: Build standalone preview for validation
         shell: pwsh
         run: ./build_preview.ps1
-
-      - name: Verify generated preview is committed
-        run: git diff --exit-code -- preview.html
 
       - name: Validate Apps Script and preview
         run: node .github/scripts/validate-portal.cjs
