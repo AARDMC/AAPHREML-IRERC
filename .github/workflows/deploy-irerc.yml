@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - clean-production-source
     paths:
       - 'Code.gs'
       - 'Index.html'
@@ -28,7 +28,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-backend-and-build-site:
+  deploy-backend:
+    # Apps Script deployment is optional until the owner configures the clasp secret
+    # and both project/deployment IDs in the irerc-production environment.
+    if: ${{ vars.IRERC_SCRIPT_ID != '' && vars.IRERC_DEPLOYMENT_ID != '' }}
     environment: irerc-production
     runs-on: ubuntu-latest
     steps:
@@ -41,7 +44,7 @@ jobs:
       - name: Install clasp
         run: npm install --global @google/clasp
 
-      - name: Build and deploy the single-file Apps Script backend
+      - name: Deploy the single-file Apps Script backend
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
           SCRIPT_ID: ${{ vars.IRERC_SCRIPT_ID }}
@@ -58,12 +61,22 @@ jobs:
           node -e 'const fs=require("node:fs"); fs.writeFileSync(".gas-build/.clasp.json", JSON.stringify({scriptId:process.env.SCRIPT_ID,rootDir:"."},null,2)+"\n");'
           (cd .gas-build && clasp show-file-status && clasp push --force && clasp update-deployment "$DEPLOYMENT_ID" --description "GitHub commit $GITHUB_SHA")
 
+  build-pages:
+    environment: irerc-production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
       - name: Build GitHub Pages frontend
         env:
-          IRERC_DEPLOYMENT_ID: ${{ vars.IRERC_DEPLOYMENT_ID }}
+          IRERC_DEPLOYMENT_ID: ${{ vars.IRERC_DEPLOYMENT_ID || 'AKfycby6lSqrVWnhoguSXmDoCled1JYAk1oSFggJ3X9Mc-gJUOFb_FmhxiKcjjqWXU19AGHG' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/build-pages.js
 
@@ -73,7 +86,7 @@ jobs:
           path: .pages-site
 
   deploy-pages:
-    needs: deploy-backend-and-build-site
+    needs: build-pages
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
