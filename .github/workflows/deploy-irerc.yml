@@ -52,9 +52,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLASPRC_JSON" || { echo "::error::Set CLASPRC_JSON in the irerc-production environment."; exit 1; }
-          test -n "$SCRIPT_ID" || { echo "::error::Set IRERC_SCRIPT_ID in the irerc-production environment."; exit 1; }
-          test -n "$DEPLOYMENT_ID" || { echo "::error::Set IRERC_DEPLOYMENT_ID in the irerc-production environment."; exit 1; }
-
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
           node scripts/build-gas.js
