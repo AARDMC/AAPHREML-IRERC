@@ -1,34 +1,92 @@
-# AAPHREML-IRERC Research Ethics Portal
+# AAPHREML-IRERC Institutional Research Ethics Review Portal
 
-Source repository for the Addis Ababa City Administration Health Bureau Institutional Research Ethics Review Committee portal.
+A single, governed route from protocol submission through screening, independent
+review, committee decision and clearance.
 
-## Hosting architecture
+This edition runs on **TanStack Start** and stores uploaded protocol documents in
+**Google Drive**, with the project source hosted on **GitHub**. There is no
+database, no Vercel dependency and no client-side credential.
 
-- **GitHub Pages** publishes the portal interface at [https://aardmc.github.io/AAPHREML-IRERC/](https://aardmc.github.io/AAPHREML-IRERC/).
-- **Google Apps Script** runs the backend as one generated Code.gs file plus the required appsscript.json manifest.
-- The Pages frontend calls an Apps Script HTML bridge over an origin-checked postMessage channel. It cannot call google.script.run directly.
-- Google Sheets stores application and scanner data; Google Drive stores uploaded protocol documents.
+## Architecture
 
-Edit modular sources in this repository (Code.gs, server/, Index.html, client/, and styles/). The Actions deployment workflow bundles these into the Apps Script target and publishes the Pages site.
+| Concern | Where it lives |
+| --- | --- |
+| Portal records (protocols, reviews, decisions, members, notifications, drafts) | Browser `localStorage` via zustand |
+| Uploaded documents (supporting letter, PI ID, protocol PDF, CV, final protocol) | Google Drive folder, proxied by the server |
+| PI accounts | `_system/aaphreml-irerc-pi-accounts.json` in the same Drive folder (in-memory fallback when Drive is not configured) |
+| Staff accounts | Server environment variables only |
+| Sessions | Signed HttpOnly JWT cookie |
+| Source of truth for code | [GitHub repository](https://github.com/AARDMC/AAPHREML-IRERC) |
+| Document storage | [Google Drive folder](https://drive.google.com/drive/folders/1IKIdODOiY_0hwanRQ4xk-MhzKVlXVprF) |
 
-## Google resource IDs
+The browser never sees a Google private key, a GitHub token, or a staff password.
+Document reads/writes go through `/api/drive/*`, which checks the session cookie
+and the caller's role.
 
-The user-provided database spreadsheet, scanner spreadsheet, and Drive folder IDs are set in server/Config.gs. Before deployment, verify the Apps Script deployment account has access to both spreadsheets and Editor access to the Drive folder. The IDs do not grant access by themselves.
+## Environment variables
 
-No sample users, default credentials, demo protocols, mock data API, or seeded examples are included. Removing sample source does not delete records already present in Google Sheets or Drive.
+Copy `.env.local.example` to `.env.local` for local work. Never commit `.env.local`
+or a service-account JSON file.
 
-## One-time owner setup
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | For Drive | Full service-account JSON (recommended) |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_PRIVATE_KEY` | Alternative | Split service-account credentials |
+| `GOOGLE_DRIVE_FOLDER_ID` | Optional | Defaults to the project folder |
+| `GOOGLE_CLIENT_ID` | Optional | Enables and verifies Google Sign-In |
+| `SESSION_SECRET` | Recommended | Signs session cookies; an ephemeral secret is used if unset |
+| `GITHUB_REPO` | Optional | Defaults to `AARDMC/AAPHREML-IRERC` |
+| `GITHUB_TOKEN` | Optional | Read access for a private repository / higher rate limit |
+| `STAFF_ACCOUNTS` | Optional | JSON array of `{ email, password, role, name? }` |
+| `STAFF_ADMIN_EMAIL` / `STAFF_ADMIN_PASS` | Optional | Per-role staff credentials |
+| `STAFF_CHAIR_EMAIL` / `STAFF_CHAIR_PASS` | Optional | Chairperson |
+| `STAFF_SECRETARIAT_EMAIL` / `STAFF_SECRETARIAT_PASS` | Optional | Secretariat |
+| `STAFF_REVIEWER1_EMAIL` / `STAFF_REVIEWER1_PASS` | Optional | Reviewer 1 |
+| `STAFF_REVIEWER2_EMAIL` / `STAFF_REVIEWER2_PASS` | Optional | Reviewer 2 |
 
-Follow [the integration and deployment guide](GITHUB_AND_GOOGLE_DRIVE_INTEGRATION_GUIDE.md) to create the Apps Script project and first web-app deployment, initialize the sheets, bootstrap the first administrator, and configure the GitHub Actions environment. The production workflow needs:
+The service account must be granted **Editor** access to the Drive folder. The
+folder ID is read from the URL `https://drive.google.com/drive/folders/<ID>`.
 
-- Environment irerc-production
-- Secret CLASPRC_JSON containing the authorized account's clasp credentials
-- Variables IRERC_SCRIPT_ID and IRERC_DEPLOYMENT_ID
+## API surface
 
-After these are configured, merging a source change to main deploys the backend and then GitHub Pages. A successful merge alone does not confirm successful deployment; check the **Deploy AAPHREML-IRERC** workflow.
+| Route | Method | Auth | Purpose |
+| --- | --- | --- | --- |
+| `/api/auth/config` | GET | public | Public integration flags (no secrets) |
+| `/api/auth/session` | GET | cookie | Current signed-in user |
+| `/api/auth/detect` | POST | public | Staff / returning PI / new PI routing |
+| `/api/auth/login` | POST | public | Email + password sign-in |
+| `/api/auth/register` | POST | public | Investigator self-registration |
+| `/api/auth/google` | POST | public | Verify a Google ID token |
+| `/api/auth/logout` | POST | cookie | Clear the session |
+| `/api/drive/status` | GET | cookie | Drive folder connectivity |
+| `/api/drive/documents` | GET / POST / DELETE | cookie | List, upload and delete document metadata |
+| `/api/drive/file` | GET | cookie | Stream a document |
+| `/api/github/status` | GET | cookie | Repository status, cached for 5 minutes |
 
-## Important limits
+Drive queries are scoped with `appProperties` (`protocolId`, `code`, `version`) so
+the app never enumerates the whole folder. Metadata is cached for 15–30 seconds;
+folder and GitHub status are cached longer.
 
-The manifest executes the web app as its deploying account and permits anonymous entry to the portal; application APIs enforce user sessions and roles. Confirm institutional access, backup, retention, and deployment policies before using real records. Password hashes use salted SHA-256 rather than a slow password KDF; this remains a security limitation.
+## Development
 
-See [the configuration manual](CONFIGURATION_AND_USER_MANUAL.md), [architecture](docs/ARCHITECTURE.md), and [change log](docs/CHANGE_LOG.md).
+```sh
+npm install
+npm run dev        # http://localhost:8080
+npm run typecheck
+npm run build
+npm run preview:restart
+```
+
+The project uses the live-preview contract on `0.0.0.0:8080`; `startup.sh` restarts
+the dev server after a sandbox revive.
+
+## Limitations
+
+- Portal records remain per-browser (`localStorage`). Documents are shared through
+  Drive, but review decisions are not yet synchronised across devices.
+- PI accounts are persisted to Drive when Drive is configured; otherwise they last
+  only for the life of the running server process.
+- Google Sign-In requires `GOOGLE_CLIENT_ID` and the deployment origin registered
+  under Authorised JavaScript origins in Google Cloud Console.
+- Drive itself enforces the 15 MB per-file server cap; the UI uses tighter limits
+  (3 MB submission files, 5 MB revisions, 10 MB final protocol PDFs).

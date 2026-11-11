@@ -1,20 +1,18 @@
-# Dependencies
 node_modules/
-.pnpm-store/
+.output/
+.nitro/
+.vercel/
+.grok/
+screenshots/
+.project_id
+.github_repo
 
-# Google clasp credentials & secrets (DO NOT COMMIT)
-.clasprc.json
-clasprc.json
-credentials.json
-*.key.json
-Signature.png
-
-# Environment variables
+# Environment: never commit real values, keep the example.
 .env
-.env.local
+.env.*
+!.env.local.example
 
-# OS & IDE files
+# Logs and OS files
+*.log
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
