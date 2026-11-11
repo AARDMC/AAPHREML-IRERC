@@ -13,11 +13,15 @@
 import {
   driveFolderId,
   driveConfigured,
+  driveConfigSource,
   serviceAccountCredentials,
+  type ServiceAccountCredentials,
 } from "@/lib/integrations/config.server";
+import { readRuntimeDriveConfig } from "@/lib/integrations/drive-config.server";
 import {
   clearDriveAccessToken,
   driveAccessToken,
+  accessTokenFor,
 } from "@/lib/integrations/google.server";
 import { cached, invalidateCache } from "@/lib/integrations/cache.server";
 
@@ -94,10 +98,10 @@ async function driveFetch(
  * this is the single piece of information an operator needs when Drive answers
  * 403/404, so every permission error repeats it.
  */
-function shareHint(): string {
-  const email = serviceAccountCredentials()?.clientEmail;
-  return email
-    ? `Share the folder with ${email} as Editor.`
+function shareHint(email?: string): string {
+  const target = email ?? serviceAccountCredentials()?.clientEmail;
+  return target
+    ? `Share the folder with ${target} as Editor.`
     : "Share the folder with the service account as Editor.";
 }
 
@@ -359,15 +363,111 @@ type DriveFolderStatus = {
   webViewLink?: string;
   error?: string;
   serviceAccountEmail?: string;
+  /** "env" = host environment, "runtime" = saved from Settings. */
+  source?: "env" | "runtime" | "none";
+  /** True when the connection was set up from Settings and can be removed there. */
+  managedHere?: boolean;
 };
+
+/**
+ * Check a candidate service account against a folder *before* saving it, so
+ * the setup form can explain missing sharing or the wrong folder ID.
+ */
+export async function verifyDriveAccess(input: {
+  credentials: ServiceAccountCredentials;
+  folderId: string;
+}): Promise<{ name: string; webViewLink?: string }> {
+  const { accessToken } = await accessTokenFor(input.credentials);
+  const params = new URLSearchParams({
+    fields: "id,name,mimeType,webViewLink",
+    supportsAllDrives: "true",
+  });
+  const response = await fetch(
+    `${DRIVE_API}/files/${encodeURIComponent(input.folderId)}?${params.toString()}`,
+    {
+      headers: { authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new DriveError(
+        `The Google Drive folder was not found. ${shareHint(input.credentials.clientEmail)}`,
+        404,
+      );
+    }
+    if (response.status === 403) {
+      throw new DriveError(
+        `Google Drive refused access to the folder (403). ${shareHint(input.credentials.clientEmail)}`,
+        403,
+      );
+    }
+    throw new DriveError(`Google Drive responded with ${response.status}.`, 502);
+  }
+  const file = (await response.json()) as DriveFile;
+  if (file.mimeType !== FOLDER_MIME) {
+    throw new DriveError("That Drive ID belongs to a file, not a folder.", 400);
+  }
+  return { name: file.name, webViewLink: file.webViewLink };
+}
+
+export type DriveSelfTestStep = { step: string; ok: boolean; detail?: string };
+
+/** End-to-end write/read/delete check used by Settings. */
+export async function driveSelfTest(): Promise<{ ok: boolean; steps: DriveSelfTestStep[] }> {
+  const steps: DriveSelfTestStep[] = [];
+  const protocolId = "_connection-test";
+  const code = "self-test";
+  try {
+    const bytes = new TextEncoder().encode(
+      `AAPHREML-IRERC connection test ${new Date().toISOString()}`,
+    );
+    const saved = await uploadDocument({
+      protocolId,
+      code,
+      version: 1,
+      name: "connection-test.txt",
+      mimeType: "text/plain",
+      bytes,
+    });
+    steps.push({ step: "Upload a test file", ok: true, detail: saved.name });
+
+    const listed = await queryDocuments({ protocolId, code, version: 1 });
+    steps.push({
+      step: "Read its metadata back",
+      ok: listed.length > 0,
+      detail: listed[0]?.name,
+    });
+
+    const downloaded = await downloadDocument(saved.id);
+    const text = await downloaded.text();
+    steps.push({ step: "Download its contents", ok: text.includes("connection test") });
+
+    await deleteDocument({ protocolId, code });
+    steps.push({ step: "Remove the test file", ok: true });
+
+    return { ok: steps.every((step) => step.ok), steps };
+  } catch (cause) {
+    steps.push({
+      step: "Drive request",
+      ok: false,
+      detail: cause instanceof Error ? cause.message : String(cause),
+    });
+    return { ok: false, steps };
+  }
+}
 
 export async function driveFolderStatus(): Promise<DriveFolderStatus> {
   const folderId = driveFolderId();
   const serviceAccountEmail = serviceAccountCredentials()?.clientEmail;
+  const source = driveConfigSource();
+  const managedHere = readRuntimeDriveConfig() !== null;
   if (!driveConfigured()) {
     return {
       connected: false,
       folderId,
+      source,
+      managedHere,
       error:
         "Set GOOGLE_SERVICE_ACCOUNT_JSON (or GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY) to connect Drive.",
     };
@@ -384,6 +484,8 @@ export async function driveFolderStatus(): Promise<DriveFolderStatus> {
           connected: false,
           folderId,
           serviceAccountEmail,
+          source,
+          managedHere,
           error: "GOOGLE_DRIVE_FOLDER_ID points at a file, not a folder.",
         };
       }
@@ -391,6 +493,8 @@ export async function driveFolderStatus(): Promise<DriveFolderStatus> {
         connected: true,
         folderId,
         serviceAccountEmail,
+        source,
+        managedHere,
         name: file.name,
         webViewLink: file.webViewLink,
       };
@@ -400,6 +504,8 @@ export async function driveFolderStatus(): Promise<DriveFolderStatus> {
       connected: false,
       folderId,
       serviceAccountEmail,
+      source,
+      managedHere,
       error: cause instanceof Error ? cause.message : "Google Drive could not be reached.",
     };
   }

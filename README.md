@@ -37,6 +37,7 @@ or a service-account JSON file.
 | `SESSION_SECRET` | Recommended | Signs session cookies; an ephemeral secret is used if unset |
 | `GITHUB_REPO` | Optional | Defaults to `AARDMC/AAPHREML-IRERC` |
 | `GITHUB_TOKEN` | Optional | Read access for a private repository / higher rate limit |
+| `IRERC_DATA_DIR` | Optional | Directory for settings-saved credentials (default `.data`) |
 | `STAFF_ACCOUNTS` | Optional | JSON array of `{ email, password, role, name? }` |
 | `STAFF_ADMIN_EMAIL` / `STAFF_ADMIN_PASS` | Optional | Per-role staff credentials |
 | `STAFF_CHAIR_EMAIL` / `STAFF_CHAIR_PASS` | Optional | Chairperson |
@@ -46,6 +47,27 @@ or a service-account JSON file.
 
 The service account must be granted **Editor** access to the Drive folder. The
 folder ID is read from the URL `https://drive.google.com/drive/folders/<ID>`.
+
+## Connecting Google Drive without a redeploy
+
+The folder can stay restricted. An administrator can finish the connection from
+the app instead of editing host environment variables:
+
+1. In Google Cloud, create a service account and download its JSON key.
+2. Open **Settings → Integrations → Google Drive → Connect Google Drive**.
+3. Paste the whole JSON key (and the folder ID if it differs) and choose
+   **Verify and connect**. The server checks the key against the folder first.
+4. The result names the exact service-account address to invite. Share the
+   Drive folder with that address as **Editor** (or Content Manager on a
+   Workspace Shared Drive), then run **Test connection** — it uploads, reads,
+   downloads and deletes one throwaway file.
+
+The key is written to `IRERC_DATA_DIR/google-drive.json` with mode `0600` and is
+never returned to a browser. Removing it with **Disconnect** falls back to the
+host environment variables, if any. Because it is a file on the server, mount a
+persistent volume (for example `/app/.data`) where one is available. If a host
+environment variable is set instead, that connection wins and the in-app form is
+hidden.
 
 ## API surface
 
@@ -61,6 +83,8 @@ folder ID is read from the URL `https://drive.google.com/drive/folders/<ID>`.
 | `/api/drive/status` | GET | cookie | Drive folder connectivity |
 | `/api/drive/documents` | GET / POST / DELETE | cookie | List, upload and delete document metadata |
 | `/api/drive/file` | GET | cookie | Stream a document |
+| `/api/drive/connect` | POST / DELETE | admin cookie | Save / remove a service-account key from Settings |
+| `/api/drive/test` | POST | admin or secretariat | Upload, read, download and delete a test file |
 | `/api/github/status` | GET | cookie | Repository status, cached for 5 minutes |
 
 Drive queries are scoped with `appProperties` (`protocolId`, `code`, `version`) so
@@ -88,5 +112,10 @@ the dev server after a sandbox revive.
   only for the life of the running server process.
 - Google Sign-In requires `GOOGLE_CLIENT_ID` and the deployment origin registered
   under Authorised JavaScript origins in Google Cloud Console.
+- A Drive key saved from Settings lives on that server's disk (`IRERC_DATA_DIR`).
+  On an ephemeral host it must be pasted again after a redeploy, or supplied
+  through `GOOGLE_SERVICE_ACCOUNT_JSON` instead.
+- The app must be hosted on a Node server (`node .output/server/index.mjs`);
+  static hosting such as GitHub Pages cannot run its API routes.
 - Drive itself enforces the 15 MB per-file server cap; the UI uses tighter limits
   (3 MB submission files, 5 MB revisions, 10 MB final protocol PDFs).

@@ -10,6 +10,7 @@ import { SignJWT, createRemoteJWKSet, importPKCS8, jwtVerify } from "jose";
 import {
   googleOAuthClientId,
   serviceAccountCredentials,
+  type ServiceAccountCredentials,
 } from "@/lib/integrations/config.server";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -22,20 +23,10 @@ const globalRef = globalThis as typeof globalThis & {
   __irercGoogleJwks__?: ReturnType<typeof createRemoteJWKSet>;
 };
 
-/** Exchange the service-account JWT for a Drive access token (cached). */
-export async function driveAccessToken(): Promise<string> {
-  const cached = globalRef.__irercDriveToken__;
-  if (cached && cached.expiresAt > Date.now() + 60_000) {
-    return cached.accessToken;
-  }
-
-  const credentials = serviceAccountCredentials();
-  if (!credentials) {
-    throw new Error(
-      "Google Drive is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON (or the split email/key variables).",
-    );
-  }
-
+/** Exchange a specific service account for a Drive access token. */
+export async function accessTokenFor(
+  credentials: ServiceAccountCredentials,
+): Promise<{ accessToken: string; expiresIn: number }> {
   const key = await importPKCS8(credentials.privateKey, "RS256").catch(() => {
     throw new Error(
       "GOOGLE_PRIVATE_KEY is not a valid PEM private key. Paste the key exactly as issued, with newlines intact.",
@@ -74,12 +65,32 @@ export async function driveAccessToken(): Promise<string> {
   if (!payload.access_token) {
     throw new Error("Google did not return an access token.");
   }
-
-  globalRef.__irercDriveToken__ = {
+  return {
     accessToken: payload.access_token,
-    expiresAt: Date.now() + (payload.expires_in ?? 3600) * 1000,
+    expiresIn: payload.expires_in ?? 3600,
   };
-  return payload.access_token;
+}
+
+/** Exchange the service-account JWT for a Drive access token (cached). */
+export async function driveAccessToken(): Promise<string> {
+  const cached = globalRef.__irercDriveToken__;
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    return cached.accessToken;
+  }
+
+  const credentials = serviceAccountCredentials();
+  if (!credentials) {
+    throw new Error(
+      "Google Drive is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON (or the split email/key variables).",
+    );
+  }
+
+  const { accessToken, expiresIn } = await accessTokenFor(credentials);
+  globalRef.__irercDriveToken__ = {
+    accessToken,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+  return accessToken;
 }
 
 export function clearDriveAccessToken(): void {

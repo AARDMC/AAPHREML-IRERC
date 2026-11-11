@@ -8,6 +8,7 @@
  */
 
 import { env } from "@/lib/env.server";
+import { readRuntimeDriveConfig } from "@/lib/integrations/drive-config.server";
 
 export const DEFAULT_DRIVE_FOLDER_ID = "1IKIdODOiY_0hwanRQ4xk-MhzKVlXVprF";
 export const DEFAULT_GITHUB_REPO = "AARDMC/AAPHREML-IRERC";
@@ -18,7 +19,19 @@ export type ServiceAccountCredentials = {
 };
 
 export function driveFolderId(): string {
-  return env("GOOGLE_DRIVE_FOLDER_ID") ?? DEFAULT_DRIVE_FOLDER_ID;
+  return (
+    env("GOOGLE_DRIVE_FOLDER_ID") ??
+    readRuntimeDriveConfig()?.folderId ??
+    DEFAULT_DRIVE_FOLDER_ID
+  );
+}
+
+/** Where the Drive credentials came from, for the Settings card. */
+export function driveConfigSource(): "env" | "runtime" | "none" {
+  if (env("GOOGLE_SERVICE_ACCOUNT_JSON") || (env("GOOGLE_SERVICE_ACCOUNT_EMAIL") && env("GOOGLE_PRIVATE_KEY"))) {
+    return "env";
+  }
+  return readRuntimeDriveConfig() ? "runtime" : "none";
 }
 
 export function githubRepo(): string {
@@ -41,6 +54,7 @@ function normalisePrivateKey(value: string): string {
   // Environment files commonly store the PEM on one line with literal \n.
   return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
 }
+export { normalisePrivateKey };
 
 /**
  * Read a Google service account either as a full JSON document
@@ -70,6 +84,15 @@ export function serviceAccountCredentials(): ServiceAccountCredentials | null {
   const privateKey = env("GOOGLE_PRIVATE_KEY");
   if (clientEmail && privateKey) {
     return { clientEmail, privateKey: normalisePrivateKey(privateKey) };
+  }
+
+  // Credentials entered in Settings and stored on the server.
+  const runtime = readRuntimeDriveConfig();
+  if (runtime) {
+    return {
+      clientEmail: runtime.clientEmail,
+      privateKey: normalisePrivateKey(runtime.privateKey),
+    };
   }
   return null;
 }

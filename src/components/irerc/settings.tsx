@@ -18,6 +18,7 @@ import { ROLE_GUIDES } from "@/lib/irerc/role-guides";
 import { useVisibleNotifications } from "@/lib/irerc/notifications-utils";
 import { Btn, Card, Chip, PageHead } from "@/components/irerc/ui";
 import { ThemePicker } from "@/components/irerc/theme-picker";
+import { DriveSetup } from "@/components/irerc/drive-setup";
 import type { DriveStatus, GithubStatus } from "@/lib/integrations/types";
 
 export function SettingsDesk() {
@@ -179,6 +180,7 @@ export function SettingsDesk() {
 }
 
 function IntegrationsCard() {
+  const role = useIrerc((s) => s.role);
   const [drive, setDrive] = useState<DriveStatus | null>(null);
   const [github, setGithub] = useState<GithubStatus | null>(null);
   const [busy, setBusy] = useState(true);
@@ -272,6 +274,7 @@ function IntegrationsCard() {
               ) : null}
             </div>
           )}
+          {role === "admin" ? <DriveSetup status={drive} onChanged={load} /> : null}
         </div>
 
         <div className="rounded-xl border border-line bg-panel-2/40 p-3">

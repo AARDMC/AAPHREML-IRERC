@@ -39,8 +39,16 @@ export type DriveStatus = {
   error?: string;
   /** Service account that must be shared on the (restricted) Drive folder. */
   serviceAccountEmail?: string;
+  /** "env" = host environment, "runtime" = saved from Settings. */
+  source?: "env" | "runtime" | "none";
+  /** True when the connection was saved from Settings and can be removed there. */
+  managedHere?: boolean;
   accountsPersisted: boolean;
 };
+
+export type DriveTestStep = { step: string; ok: boolean; detail?: string };
+
+export type DriveTestResult = { ok: boolean; steps: DriveTestStep[] };
 
 export type GithubCommit = {
   sha: string;

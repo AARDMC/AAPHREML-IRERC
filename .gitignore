@@ -16,3 +16,6 @@ screenshots/
 *.log
 .DS_Store
 Thumbs.db
+
+# Drive credentials saved from Settings at runtime - never commit.
+.data/

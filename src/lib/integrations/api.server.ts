@@ -25,14 +25,25 @@ import {
   sessionCookie,
 } from "@/lib/integrations/session.server";
 import { verifyGoogleIdToken } from "@/lib/integrations/google.server";
+import { clearDriveAccessToken } from "@/lib/integrations/google.server";
+import { driveConfigSource, driveFolderId, normalisePrivateKey } from "@/lib/integrations/config.server";
 import {
+  clearRuntimeDriveConfig,
+  DriveConfigError,
+  writeRuntimeDriveConfig,
+} from "@/lib/integrations/drive-config.server";
+import { invalidateCache } from "@/lib/integrations/cache.server";
+import {
+  DriveError,
   MAX_DOCUMENT_BYTES,
   deleteDocument,
   downloadDocument,
   driveFolderStatus,
+  driveSelfTest,
   getDocumentMetadata,
   listDocuments,
   uploadDocument,
+  verifyDriveAccess,
 } from "@/lib/integrations/drive.server";
 import { githubStatus } from "@/lib/integrations/github.server";
 import type { AuthUser } from "@/lib/integrations/types";
@@ -265,6 +276,93 @@ export const handleDriveStatus = handler(async (request) => {
   await requireUser(request);
   const status = await driveFolderStatus();
   return json({ ...status, accountsPersisted: authConfigPayload().accountsPersisted });
+});
+
+/* ── Drive connection setup (administrators) ───────────────────────────── */
+
+function requireAdmin(user: AuthUser): void {
+  if (user.role !== "admin") {
+    throw new HttpError("Only an administrator can change the Google Drive connection.", 403);
+  }
+}
+
+/**
+ * Accept a service-account key pasted into Settings, prove it can see the
+ * folder, then keep it on the server. The key is never echoed back.
+ */
+export const handleDriveConnect = handler(async (request) => {
+  const user = await requireUser(request);
+  requireAdmin(user);
+
+  const body = await readJson<{ serviceAccountJson?: unknown; folderId?: unknown }>(request);
+  const raw = typeof body.serviceAccountJson === "string" ? body.serviceAccountJson.trim() : "";
+  if (!raw) throw new HttpError("Paste the service-account JSON key first.", 400);
+
+  let parsed: { client_email?: string; private_key?: string };
+  try {
+    parsed = JSON.parse(raw) as { client_email?: string; private_key?: string };
+  } catch {
+    throw new HttpError("That is not valid JSON. Paste the whole service-account key file.", 400);
+  }
+  const clientEmail = parsed.client_email?.trim() ?? "";
+  const privateKey = parsed.private_key ? normalisePrivateKey(parsed.private_key) : "";
+  if (!clientEmail || !privateKey) {
+    throw new HttpError("The key file must include client_email and private_key.", 400);
+  }
+
+  const folderId =
+    (typeof body.folderId === "string" ? body.folderId.trim() : "") || driveFolderId();
+
+  let folder: { name: string; webViewLink?: string };
+  try {
+    folder = await verifyDriveAccess({ credentials: { clientEmail, privateKey }, folderId });
+  } catch (cause) {
+    if (cause instanceof DriveError) throw new HttpError(cause.message, cause.status);
+    if (cause instanceof DriveConfigError) throw new HttpError(cause.message, cause.status);
+    const message =
+      cause instanceof Error ? cause.message : "The service account could not be verified.";
+    // A malformed key is a typo in the form, not a Google outage.
+    const status = /not a valid PEM private key/i.test(message) ? 400 : 502;
+    throw new HttpError(message, status);
+  }
+
+  writeRuntimeDriveConfig({ clientEmail, privateKey, folderId });
+  clearDriveAccessToken();
+  invalidateCache("drive:folder-status");
+
+  return json({
+    connected: true,
+    folderId,
+    folderName: folder.name,
+    webViewLink: folder.webViewLink,
+    serviceAccountEmail: clientEmail,
+  });
+});
+
+/** Remove a connection that was saved from Settings (env config stays). */
+export const handleDriveDisconnect = handler(async (request) => {
+  const user = await requireUser(request);
+  requireAdmin(user);
+  if (driveConfigSource() === "env") {
+    throw new HttpError(
+      "This connection comes from the host environment. Remove GOOGLE_SERVICE_ACCOUNT_JSON there to disconnect.",
+      409,
+    );
+  }
+  clearRuntimeDriveConfig();
+  clearDriveAccessToken();
+  invalidateCache("drive:folder-status");
+  return json({ connected: false });
+});
+
+/** Upload → read → download → delete a throwaway file. */
+export const handleDriveTest = handler(async (request) => {
+  const user = await requireUser(request);
+  if (user.role !== "admin" && user.role !== "secretariat") {
+    throw new HttpError("Your role cannot run the Drive check.", 403);
+  }
+  const result = await driveSelfTest();
+  return json(result, result.ok ? 200 : 502);
 });
 
 export const handleDriveList = handler(async (request) => {
