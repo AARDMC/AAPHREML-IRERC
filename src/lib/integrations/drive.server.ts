@@ -13,6 +13,7 @@
 import {
   driveFolderId,
   driveConfigured,
+  serviceAccountCredentials,
 } from "@/lib/integrations/config.server";
 import {
   clearDriveAccessToken,
@@ -88,6 +89,18 @@ async function driveFetch(
   return response;
 }
 
+/**
+ * Name the account the folder has to be shared with. With a restricted folder
+ * this is the single piece of information an operator needs when Drive answers
+ * 403/404, so every permission error repeats it.
+ */
+function shareHint(): string {
+  const email = serviceAccountCredentials()?.clientEmail;
+  return email
+    ? `Share the folder with ${email} as Editor.`
+    : "Share the folder with the service account as Editor.";
+}
+
 async function errorFrom(response: Response): Promise<DriveError> {
   let detail = "";
   try {
@@ -98,13 +111,13 @@ async function errorFrom(response: Response): Promise<DriveError> {
   }
   if (response.status === 404) {
     return new DriveError(
-      "The Google Drive folder was not found. Confirm that the folder is shared with the service account.",
+      `The Google Drive folder was not found. ${shareHint()}`,
       404,
     );
   }
   if (response.status === 403) {
     return new DriveError(
-      `Google Drive refused the request (403). ${detail || "Confirm the service account has Editor access to the folder."}`,
+      `Google Drive refused the request (403). ${shareHint()}${detail ? ` (${detail})` : ""}`,
       403,
     );
   }
@@ -345,10 +358,12 @@ type DriveFolderStatus = {
   name?: string;
   webViewLink?: string;
   error?: string;
+  serviceAccountEmail?: string;
 };
 
 export async function driveFolderStatus(): Promise<DriveFolderStatus> {
   const folderId = driveFolderId();
+  const serviceAccountEmail = serviceAccountCredentials()?.clientEmail;
   if (!driveConfigured()) {
     return {
       connected: false,
@@ -368,12 +383,14 @@ export async function driveFolderStatus(): Promise<DriveFolderStatus> {
         return {
           connected: false,
           folderId,
+          serviceAccountEmail,
           error: "GOOGLE_DRIVE_FOLDER_ID points at a file, not a folder.",
         };
       }
       return {
         connected: true,
         folderId,
+        serviceAccountEmail,
         name: file.name,
         webViewLink: file.webViewLink,
       };
@@ -382,6 +399,7 @@ export async function driveFolderStatus(): Promise<DriveFolderStatus> {
     return {
       connected: false,
       folderId,
+      serviceAccountEmail,
       error: cause instanceof Error ? cause.message : "Google Drive could not be reached.",
     };
   }

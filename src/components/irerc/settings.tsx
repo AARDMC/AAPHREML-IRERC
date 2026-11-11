@@ -80,7 +80,7 @@ export function SettingsDesk() {
       </div>
 
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[1.35fr_0.65fr]">
-        <Card className="p-4 md:p-5">
+        <Card className="min-w-0 p-4 md:p-5">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="size-5 text-em" />
             <h2 className="text-lg font-semibold">Operating instructions</h2>
@@ -98,7 +98,7 @@ export function SettingsDesk() {
           </ol>
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card className="p-4">
             <h2 className="text-lg font-semibold">Profile photo</h2>
             <p className="mt-1 text-xs text-muted">Choose a photo from your device gallery. It is shown in the header for this role.</p>
@@ -252,6 +252,9 @@ function IntegrationsCard() {
             <div className="mt-1 space-y-0.5 text-xs text-muted">
               <p>Folder: <span className="font-semibold text-fg">{drive.name ?? drive.folderId}</span></p>
               <p>PI accounts: {drive.accountsPersisted ? "stored in Drive _system" : "in memory only"}</p>
+              {drive.serviceAccountEmail ? (
+                <p className="break-words">Access via: <span className="font-semibold text-fg">{drive.serviceAccountEmail}</span></p>
+              ) : null}
               <a
                 href={drive.webViewLink ?? `https://drive.google.com/drive/folders/${drive.folderId}`}
                 target="_blank"
@@ -262,9 +265,12 @@ function IntegrationsCard() {
               </a>
             </div>
           ) : (
-            <p className="mt-1 text-xs text-muted">
-              {drive?.error ?? "Add the Google service-account key to enable document uploads and previews."}
-            </p>
+            <div className="mt-1 space-y-1 text-xs text-muted">
+              <p>{drive?.error ?? "Add the Google service-account key to enable document uploads and previews."}</p>
+              {drive?.serviceAccountEmail ? (
+                <p className="break-words">Shared folder access must be granted to <span className="font-semibold text-fg">{drive.serviceAccountEmail}</span>.</p>
+              ) : null}
+            </div>
           )}
         </div>
 

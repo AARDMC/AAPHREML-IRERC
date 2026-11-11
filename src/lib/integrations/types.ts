@@ -37,6 +37,8 @@ export type DriveStatus = {
   name?: string;
   webViewLink?: string;
   error?: string;
+  /** Service account that must be shared on the (restricted) Drive folder. */
+  serviceAccountEmail?: string;
   accountsPersisted: boolean;
 };
 

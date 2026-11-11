@@ -36,7 +36,11 @@ export async function driveAccessToken(): Promise<string> {
     );
   }
 
-  const key = await importPKCS8(credentials.privateKey, "RS256");
+  const key = await importPKCS8(credentials.privateKey, "RS256").catch(() => {
+    throw new Error(
+      "GOOGLE_PRIVATE_KEY is not a valid PEM private key. Paste the key exactly as issued, with newlines intact.",
+    );
+  });
   const assertion = await new SignJWT({ scope: DRIVE_SCOPE })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setIssuer(credentials.clientEmail)

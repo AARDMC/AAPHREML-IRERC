@@ -1,7 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { BRAND } from "@/lib/irerc/model";
-import appCss from "../styles.css?url";
+import "../styles.css";
 
 const APP_NAME = BRAND.title;
 
@@ -20,7 +20,6 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/png", href: "/seal.png" },
       { rel: "apple-touch-icon", href: "/seal.png" },
-      { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
     ],
   }),
